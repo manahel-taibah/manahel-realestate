@@ -220,3 +220,32 @@ html{scroll-padding-top:120px}
 #adminPanel #manahelDashboard,#adminPanel #listingForm,#adminPanel #adminListings,#adminPanel #adminRequests{scroll-margin-top:20px}
 @media(max-width:1000px){#adminPanel.manahel-admin-layout{grid-template-columns:1fr}.manahel-admin-nav{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.manahel-admin-nav-title,.manahel-new-requests{grid-column:1/-1}.manahel-admin-nav-link{text-align:center}}
 @media(max-width:480px){.manahel-admin-nav{padding:10px}.manahel-admin-nav-link{padding:11px 7px;font-size:.87rem}}
+
+/* Manahel admin mobile polish — CSS only; public listings and Supabase unchanged */
+body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
+@media (max-width: 750px) {
+  #adminView.section { padding-top: 20px; padding-bottom: 38px; }
+  #adminView > .section-head { margin-bottom: 16px; align-items: center; gap: 10px; }
+  #adminView > .section-head h2 { font-size: clamp(22px, 5.7vw, 29px); line-height: 1.35; margin: 5px 0 0; }
+  #adminView > .section-head .kicker { font-size: 12px; }
+  #adminPanel.manahel-admin-layout { gap: 14px; }
+  #adminPanel .manahel-admin-nav { padding: 12px; border-radius: 14px; gap: 7px; }
+  #adminPanel .manahel-admin-nav-title { padding-bottom: 8px; margin-bottom: 2px; }
+  #adminPanel .manahel-admin-nav-link { padding: 10px 8px; min-height: 44px; }
+  #adminPanel .manahel-new-requests { margin-top: 3px; padding: 10px; }
+  #adminPanel .admin-toolbar { margin-bottom: 13px; gap: 8px; flex-wrap: wrap; }
+  #adminPanel .stats span { padding: 9px 12px; }
+  #adminPanel .dash-heading { margin-bottom: 11px; }
+  #adminPanel .dash-heading h3 { font-size: 1.13rem; }
+  #adminPanel .dash-cards { gap: 9px; margin-bottom: 12px; }
+  #adminPanel .dash-stat { padding: 12px 13px; gap: 5px; min-height: 94px; border-radius: 13px; }
+  #adminPanel .dash-stat-label { font-size: .82rem; line-height: 1.4; }
+  #adminPanel .dash-stat-value { font-size: 1.7rem; }
+  #adminPanel .dash-panel { padding: 14px; border-radius: 14px; }
+}
+@media (max-width: 380px) {
+  #adminView.section { padding-top: 14px; }
+  #adminView > .section-head h2 { font-size: 21px; }
+  #adminPanel .dash-stat { padding: 10px; min-height: 88px; }
+  #adminPanel .dash-stat-value { font-size: 1.55rem; }
+}
