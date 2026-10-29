@@ -145,7 +145,6 @@ async function renderPropertyRoute(){
  const facts=el('div','property-page-facts');for(const [label,value] of [['النوع',x.property_type],['المدينة',x.city],['الحي',x.district],['المساحة',x.area!=null?new Intl.NumberFormat('ar-SA').format(x.area)+' م²':null],['ترخيص الإعلان',x.ad_license]]){if(value!==null&&value!==undefined&&value!==''){const fact=el('div','property-page-fact');fact.append(el('small','',label),el('strong','',String(value)));facts.append(fact)}}main.append(facts);
  if(x.description){main.append(el('h3','','وصف العقار'),el('p','property-page-description',x.description))}
  const specs=renderPropertyDetails(x);if(specs){specs.open=true;main.append(specs)}
- aside.append(el('div','price',format(x.price)));
  const wa=el('a','btn navy full','الاستفسار عبر واتساب');wa.href='https://wa.me/'+cfg.whatsapp+'?text='+encodeURIComponent('مرحبًا، أرغب بالاستفسار عن العقار: '+x.title+'\n'+propertyLink(x.id));wa.target='_blank';wa.rel='noopener';aside.append(wa);
  const share=el('a','btn gold full','مشاركة العقار عبر واتساب');share.href='https://wa.me/?text='+encodeURIComponent(x.title+'\n'+propertyLink(x.id));share.target='_blank';share.rel='noopener';aside.append(share);
  const copy=el('button','ghost full','نسخ رابط العقار');copy.type='button';copy.onclick=async()=>{try{await navigator.clipboard.writeText(propertyLink(x.id));copy.textContent='تم نسخ الرابط'}catch{window.prompt('انسخ رابط العقار:',propertyLink(x.id))}};aside.append(copy);
