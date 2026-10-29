@@ -109,7 +109,49 @@ function renderDashboard(){
  for(const x of recent){const line=el('div','dash-recent');line.append(el('strong','',x.title||'عقار بدون عنوان'),el('span','',x.is_published?'منشور':'غير منشور'));latest.append(line)}
  sections.append(statusBox,latest);dash.append(sections);
 }
-function renderAdmin(){const lp=$('adminListings');lp.replaceChildren();for(const x of listings){const item=el('div','admin-item');item.append(el('strong','',x.title),el('small','',x.city+' · '+format(x.price)+' · '+(x.is_published?'منشور':'مخفي')));const actions=el('div','actions'),edit=el('button','','تعديل'),del=el('button','danger','حذف');edit.onclick=()=>editListing(x);del.onclick=()=>deleteListing(x);actions.append(edit,del);item.append(actions);lp.append(item)}if(!listings.length)lp.append(el('p','','لا توجد عروض بعد.'));const rr=$('adminRequests');rr.replaceChildren();for(const x of requests){const item=el('div','admin-item');item.append(el('strong','',x.full_name+' — '+x.phone),el('small','',x.property_type+' · '+x.city+(x.district?' · '+x.district:'')),el('p','',`الميزانية: ${format(x.budget)} | ${x.notes||'لا توجد ملاحظات'}`));const status=el('select');for(const val of ['جديد','قيد المتابعة','مكتمل']){const op=el('option','',val);op.value=val;status.append(op)}status.value=x.status||'جديد';status.onchange=async()=>{const {error}=await db.from('property_requests').update({status:status.value}).eq('id',x.id);if(error){alert('تعذر تحديث الحالة');status.value=x.status||'جديد'}else{x.status=status.value;renderDashboard();setupAdminNavigation()}};item.append(status);rr.append(item)}if(!requests.length)rr.append(el('p','','لا توجد طلبات بعد.'))}
+function renderRequestItems(){
+ const rr=$('adminRequests');if(!rr)return;
+ const tools=rr.previousElementSibling;
+ const search=tools?.querySelector('.request-search')?.value.trim().toLocaleLowerCase('ar')||'';
+ const filter=tools?.querySelector('.request-filter')?.value||'';
+ const shown=requests.filter(x=>(!filter||(x.status||'جديد')===filter)&&(!search||String(x.full_name||'').toLocaleLowerCase('ar').includes(search)||String(x.phone||'').includes(search)));
+ rr.replaceChildren();
+ const count=tools?.querySelector('.request-result-count');if(count)count.textContent=`النتائج: ${shown.length} من ${requests.length}`;
+ for(const x of shown){
+  const item=el('div','admin-item request-item');
+  item.append(el('strong','',`${x.full_name} — ${x.phone}`),el('small','',`${x.property_type||''} · ${x.city||''}${x.district?' · '+x.district:''}`),el('p','',`الميزانية: ${format(x.budget)} | ${x.notes||'لا توجد ملاحظات من العميل'}`));
+  if(x.created_at){const d=new Date(x.created_at);if(!Number.isNaN(d.getTime()))item.append(el('small','',`تاريخ الاستلام: ${d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'})}`))}
+  const actions=el('div','request-actions');
+  const status=el('select');status.setAttribute('aria-label','حالة طلب '+x.full_name);
+  for(const val of ['جديد','قيد المتابعة','مكتمل']){const op=el('option','',val);op.value=val;status.append(op)}status.value=x.status||'جديد';
+  status.onchange=async()=>{status.disabled=true;const stamp=new Date().toISOString();const {error}=await db.from('property_requests').update({status:status.value,updated_at:stamp}).eq('id',x.id);status.disabled=false;if(error){alert('تعذر تحديث الحالة: تحقق من صلاحيات التعديل');status.value=x.status||'جديد'}else{x.status=status.value;x.updated_at=stamp;renderDashboard();setupAdminNavigation();renderRequestItems()}};
+  actions.append(status);
+  const phone=String(x.phone||'').replace(/[^\d]/g,'');const normalized=phone.startsWith('0')?'966'+phone.slice(1):phone;
+  if(normalized.length>=9&&normalized.length<=15){const wa=el('a','request-whatsapp','واتساب العميل');wa.href='https://wa.me/'+encodeURIComponent(normalized);wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
+  item.append(actions);
+  const notesLabel=el('label','request-note-label','ملاحظات المتابعة الداخلية');const memo=el('textarea','request-memo');memo.rows=2;memo.value=x.follow_up_notes||'';memo.placeholder='سجل تفاصيل التواصل والخطوة القادمة';
+  const save=el('button','request-save','حفظ الملاحظات');save.type='button';const feedback=el('small','request-feedback');
+  save.onclick=async()=>{save.disabled=true;feedback.textContent='جارٍ الحفظ...';const stamp=new Date().toISOString();const {error}=await db.from('property_requests').update({follow_up_notes:memo.value,updated_at:stamp}).eq('id',x.id);save.disabled=false;if(error){feedback.textContent='تعذر الحفظ؛ تحقق من صلاحيات التعديل';return}x.follow_up_notes=memo.value;x.updated_at=stamp;feedback.textContent='تم حفظ الملاحظات';};
+  item.append(notesLabel,memo,save,feedback);
+  if(x.updated_at){const d=new Date(x.updated_at);if(!Number.isNaN(d.getTime()))item.append(el('small','',`آخر تحديث: ${d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'})}`))}
+  rr.append(item);
+ }
+ if(!shown.length)rr.append(el('p','','لا توجد طلبات مطابقة للبحث.'));
+}
+function renderAdmin(){const lp=$('adminListings');lp.replaceChildren();for(const x of listings){const item=el('div','admin-item');item.append(el('strong','',x.title),el('small','',x.city+' · '+format(x.price)+' · '+(x.is_published?'منشور':'مخفي')));const actions=el('div','actions'),edit=el('button','','تعديل'),del=el('button','danger','حذف');edit.onclick=()=>editListing(x);del.onclick=()=>deleteListing(x);actions.append(edit,del);item.append(actions);lp.append(item)}if(!listings.length)lp.append(el('p','','لا توجد عروض بعد.'));const rr=$('adminRequests');
+  if(!rr.dataset.enhanced){
+    rr.dataset.enhanced='1';
+    const tools=el('div','request-tools');
+    const search=el('input','request-search');search.type='search';search.placeholder='بحث باسم العميل أو رقم الجوال';search.setAttribute('aria-label','بحث في الطلبات');
+    const filter=el('select','request-filter');filter.setAttribute('aria-label','تصفية حسب حالة الطلب');
+    for(const [value,label] of [['','كل الحالات'],['جديد','جديد'],['قيد المتابعة','قيد المتابعة'],['مكتمل','مكتمل']]){const op=el('option','',label);op.value=value;filter.append(op)}
+    const count=el('small','request-result-count');
+    tools.append(search,filter,count);
+    rr.before(tools);
+    search.addEventListener('input',()=>renderRequestItems());
+    filter.addEventListener('change',()=>renderRequestItems());
+  }
+  renderRequestItems();}
 function editListing(x){const f=$('listingForm');for(const key of ['id','title','property_type','city','district','price','area','ad_license','description','map_url','image_url'])f.elements[key].value=x[key]??'';for(const key of detailFields)f.elements[key].value=x[key]??'';f.elements.has_elevator.checked=!!x.has_elevator;f.elements.has_parking.checked=!!x.has_parking;f.elements.is_published.checked=!!x.is_published;$('editorTitle').textContent='تعديل العرض العقاري';$('galleryFiles').value='';$('galleryPreview').replaceChildren();renderExistingImages(x);f.scrollIntoView({behavior:'smooth',block:'start'})}
 function clearEditor(){const f=$('listingForm');f.reset();f.elements.id.value='';$('editorTitle').textContent='إضافة عرض عقاري';$('galleryPreview').replaceChildren();$('existingImages').replaceChildren();setStatus('editorStatus','')}$('clearEditor').onclick=clearEditor;
 async function deleteListing(x){if(!confirm('هل تريد حذف العرض: '+x.title+'؟'))return;const {error}=await db.from('properties').delete().eq('id',x.id);if(error)alert('تعذر حذف العرض');else{await loadAdmin();await loadPublic()}}
