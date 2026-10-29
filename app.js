@@ -235,13 +235,46 @@ function crmParseCSV(text){
  const cityCol=find(['city','المدينة']),districtCol=find(['district','الحي']),roleCol=find(['role','category','التصنيف','الصفة']);
  return rows.slice(1).map(r=>({full_name:r[nameCol]||'',phone:r[phoneCol]||'',city:r[cityCol]||'',district:r[districtCol]||'',role:r[roleCol]||''}));
 }
-function crmParseVCF(text){
- const unfolded=String(text||'').replace(/\r\n[ \t]|\n[ \t]/g,'');const cards=unfolded.split(/BEGIN:VCARD/i).slice(1),out=[];
- for(const card of cards){const body=card.split(/END:VCARD/i)[0],lines=body.split(/\r?\n/);let name='',phone='';
-  for(const line of lines){const pos=line.indexOf(':');if(pos<0)continue;const key=line.slice(0,pos).split(';')[0].toUpperCase(),val=line.slice(pos+1).trim();if(key==='FN'&&!name)name=val.replace(/\\n/gi,' ').replace(/\\,/g,',');if(key==='TEL'&&!phone)phone=val.replace(/^tel:/i,'')}
-  if(name||phone)out.push({full_name:name,phone,city:'',district:'',role:''});
+function crmDecodeVcardValue(raw,meta=''){
+ const params=String(meta).toUpperCase();
+ let value=String(raw||'');
+ if(/(?:^|;)ENCODING=QUOTED-PRINTABLE(?:;|$)/i.test(params)||/(?:=[0-9A-F]{2}){2,}/i.test(value)){
+  const bytes=[];
+  for(let i=0;i<value.length;){
+   if(value[i]==='='&&/^[0-9a-f]{2}$/i.test(value.slice(i+1,i+3))){bytes.push(parseInt(value.slice(i+1,i+3),16));i+=3;continue}
+   const cp=value.codePointAt(i);bytes.push(...new TextEncoder().encode(String.fromCodePoint(cp)));i+=cp>0xffff?2:1;
+  }
+  value=new TextDecoder('utf-8',{fatal:false}).decode(new Uint8Array(bytes));
+ }else if(/(?:^|;)ENCODING=(?:B|BASE64)(?:;|$)/i.test(params)){
+  try{const binary=atob(value.replace(/\s/g,''));value=new TextDecoder('utf-8').decode(Uint8Array.from(binary,c=>c.charCodeAt(0)))}catch(e){console.warn('VCF base64 decode failed',e)}
  }
- return out;
+ return value.replace(/\\[nN]/g,' ').replace(/\\([,;\\])/g,'$1').trim();
+}
+function crmParseVCF(text){
+ // VCF allows folded lines (leading whitespace) and quoted-printable soft line breaks.
+ const physical=String(text||'').replace(/^\uFEFF/,'').split(/\r\n|\n|\r/);
+ const lines=[];
+ for(const part of physical){
+  if(lines.length&&/^[ \t]/.test(part)){lines[lines.length-1]+=part.slice(1);continue}
+  if(lines.length&&/=$/.test(lines[lines.length-1])&&/ENCODING=QUOTED-PRINTABLE/i.test(lines[lines.length-1].split(':')[0])){
+   lines[lines.length-1]=lines[lines.length-1].slice(0,-1)+part;continue
+  }
+  lines.push(part);
+ }
+ const out=[];let active=false,name='',structured='',phone='';
+ const finish=()=>{if(active&&(name||structured||phone))out.push({full_name:name||structured,phone,city:'',district:'',role:''})};
+ for(const line of lines){
+  if(/^BEGIN:VCARD\s*$/i.test(line)){finish();active=true;name='';structured='';phone='';continue}
+  if(/^END:VCARD\s*$/i.test(line)){finish();active=false;continue}
+  if(!active)continue;
+  const pos=line.indexOf(':');if(pos<0)continue;
+  const meta=line.slice(0,pos),key=meta.split(';')[0].split('.').pop().toUpperCase();
+  const val=crmDecodeVcardValue(line.slice(pos+1),meta);
+  if(key==='FN'&&!name)name=val;
+  if(key==='N'&&!structured)structured=val.split(';').filter(Boolean).join(' ');
+  if(key==='TEL'&&!phone)phone=val.replace(/^tel:/i,'');
+ }
+ finish();return out;
 }
 function ensureCrmImporter(root){
  if(root.querySelector('#crmImportPanel'))return;
@@ -257,7 +290,7 @@ function ensureCrmImporter(root){
  function prepare(){
   const seen=new Set(crmContacts.map(c=>crmPhone(c.phone)).filter(Boolean));const local=new Set();let invalid=0,duplicate=0;
   pending=[];
-  for(const r of crmImportRows){const name=String(r.full_name||'').trim().slice(0,160),phone=crmPhone(r.phone);if(!name||phone.length<9||phone.length>15){invalid++;continue}
+  for(const r of crmImportRows){const name=String(r.full_name||'').trim().slice(0,160),phone=crmPhone(r.phone);if(!name||phone.length<9||phone.length>15||/(?:=[0-9A-F]{2}){2,}/i.test(name)||name.includes('�')){invalid++;continue}
    if(seen.has(phone)||local.has(phone)){duplicate++;continue}local.add(phone);
    pending.push({full_name:name,phone,role:crmRoles.includes(r.role)?r.role:role.value,city:String(r.city||'').trim().slice(0,160)||null,district:String(r.district||'').trim().slice(0,160)||null});
   }
