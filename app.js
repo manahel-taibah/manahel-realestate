@@ -137,8 +137,20 @@ async function renderPropertyRoute(){
  if(!x){root.append(el('h2','','العقار غير متاح حاليًا'),el('p','','لم نعثر على عرض منشور بهذا الرابط. تحقق من الرابط أو حالة نشر العقار.'));return}
  const header=el('div','property-page-heading');header.append(el('span','tag',x.property_type),el('h1','',x.title),el('p','',x.city+(x.district?' · '+x.district:'')),el('div','price',format(x.price)));root.append(header);
  const photos=photosFor(x),visual=el('div','property-page-visual');
- if(photos.length){const img=el('img','property-page-cover');img.src=photos[0].url;img.alt=x.title;img.loading='eager';visual.append(img);const open=el('button','btn navy','عرض جميع الصور ('+photos.length+')');open.type='button';open.onclick=()=>openGallery(x);visual.append(open);const thumbs=el('div','property-page-thumbs');photos.slice(0,6).forEach((p,i)=>{const b=el('button','','');b.type='button';b.setAttribute('aria-label','عرض الصورة '+(i+1));const thumb=el('img');thumb.src=p.url;thumb.alt='صورة '+(i+1);thumb.loading='lazy';b.append(thumb);b.onclick=()=>{openGallery(x);galleryIndex=i;galleryRender()};thumbs.append(b)});visual.append(thumbs)}
- else visual.append(el('p','empty','لا توجد صور متاحة لهذا العقار.'));
+ if(photos.length){
+  const grid=el('div','property-all-photos');
+  photos.forEach((photo,i)=>{
+   const button=el('button','property-photo-item');
+   button.type='button';button.setAttribute('aria-label','تكبير صورة العقار '+(i+1)+' من '+photos.length);
+   const img=el('img');img.src=photo.url;img.alt=x.title+' - صورة '+(i+1);img.loading=i===0?'eager':'lazy';
+   button.append(img);
+   button.onclick=()=>{openGallery(x);galleryIndex=i;galleryRender()};
+   grid.append(button);
+  });
+  visual.append(grid);
+  const hint=el('p','property-photos-hint','صور العقار ('+photos.length+') — اضغط على أي صورة لتكبيرها والتنقل بينها');
+  visual.append(hint);
+ } else visual.append(el('p','empty','لا توجد صور متاحة لهذا العقار.'));
  root.append(visual);
  const content=el('div','property-page-content'),main=el('div','property-page-main'),aside=el('aside','property-page-aside');
  main.append(el('h2','','تفاصيل العقار'));
