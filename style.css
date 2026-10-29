@@ -194,3 +194,15 @@ html{scroll-padding-top:120px}
   /* صفحة التفاصيل تحتوي على زر استفسار خاص بها؛ إخفاء العائم يمنع تغطية الصور. */
   body:has(#propertyPage:not([hidden])) > .whatsapp { display: none; }
 }
+
+/* Admin dashboard — visual-only addition, no public-page changes */
+.manahel-dashboard{margin:0 0 24px;direction:rtl}
+.dash-heading{margin:0 0 16px}.dash-heading h3{margin:0 0 4px;color:#092346;font-size:1.3rem}.dash-heading p{margin:0;color:#657084}
+.dash-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.dash-stat{background:#fff;border:1px solid #e3e8ef;border-radius:16px;padding:17px;box-shadow:0 4px 16px #0a23440a;display:flex;flex-direction:column;gap:9px}
+.dash-stat-label{font-size:.92rem;color:#5e6b7e}.dash-stat-value{font-size:2rem;line-height:1.2;color:#092346;font-weight:800}
+.dash-sections{display:grid;grid-template-columns:1fr 1fr;gap:14px}.dash-panel{border:1px solid #e3e8ef;border-radius:16px;padding:18px;background:#fff}.dash-panel h4{color:#092346;margin:0 0 16px;font-size:1.05rem}
+.dash-status-row,.dash-recent{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.92rem}.dash-status-row b{color:#092346}.dash-track{height:8px;background:#edf1f6;border-radius:100px;overflow:hidden;margin:7px 0 15px}.dash-fill{height:100%;background:#d7a439;border-radius:100px}
+.dash-recent{padding:11px 0;border-bottom:1px solid #edf0f4}.dash-recent:last-child{border-bottom:0}.dash-recent strong{font-weight:600;overflow-wrap:anywhere}.dash-recent span{white-space:nowrap;color:#657084;font-size:.8rem}.dash-empty{color:#657084}
+@media(max-width:800px){.dash-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-sections{grid-template-columns:1fr}}
+@media(max-width:440px){.dash-stat{padding:12px}.dash-stat-value{font-size:1.7rem}.dash-stat-label{font-size:.83rem}.dash-panel{padding:14px}}
