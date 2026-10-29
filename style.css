@@ -291,3 +291,7 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 .crm-card small{color:#66758b}.crm-card p{margin:0;overflow-wrap:anywhere}.crm-whatsapp{padding:10px 16px;background:#16865f;color:white;border-radius:9px;text-decoration:none}
 .crm-links{display:grid;gap:9px;padding-top:10px;border-top:1px solid #e5eaf1}.crm-linked-row{display:flex;justify-content:space-between;align-items:center;gap:8px}.crm-link-add select{flex:1;min-width:115px}
 @media(max-width:700px){.crm-fields,.crm-list{grid-template-columns:1fr}.crm-section{padding:16px}.crm-link-add{align-items:stretch}.crm-link-add select{min-width:100%}}
+
+/* CRM Android/CSV contact importer */
+.crm-import-panel{margin:18px 0;padding:18px;border:1px solid #e0d7c3;border-radius:14px;background:#fffaf0}.crm-import-panel h4{margin:0 0 8px}.crm-import-panel p{line-height:1.8}.crm-import-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.crm-import-controls input[type=file]{max-width:100%;flex:1 1 220px}.crm-import-controls select{flex:1 1 150px}.crm-import-controls button{flex:1 1 170px}.crm-import-preview{max-height:250px;overflow:auto}.crm-import-preview-row{padding:8px 0;border-bottom:1px solid #eee;font-size:13px;overflow-wrap:anywhere}.crm-import-summary{font-weight:700}
+@media(max-width:600px){.crm-import-panel{padding:12px}.crm-import-controls>*{width:100%;flex-basis:100%}}

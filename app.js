@@ -206,10 +206,81 @@ function ensureCrmSection(){
  save.disabled=true;const q=key?db.from('crm_contacts').update(data).eq('id',key):db.from('crm_contacts').insert(data);const {error}=await q;save.disabled=false;
  if(error){alert('تعذر حفظ العميل: '+error.message);return}form.reset();form.elements.id.value='';save.textContent='حفظ العميل';await loadCrmContacts();
  };
+ ensureCrmImporter(root);
  const tools=el('div','crm-tools'),search=el('input');search.type='search';search.placeholder='بحث بالاسم أو الجوال';search.id='crmSearch';const filter=el('select');filter.id='crmRoleFilter';filter.append(crmOption('','جميع التصنيفات'));crmRoles.forEach(x=>filter.append(crmOption(x,x)));search.oninput=renderCrm;filter.onchange=renderCrm;tools.append(search,filter);
  const count=el('small','crm-count');count.id='crmCount';const items=el('div','crm-list');items.id='crmList';const status=el('p','crm-status');root.append(form,tools,count,items,status);
  const panel=$('manahelAdminContent')||$('adminPanel');panel.append(root);return root;
 }
+
+// Local-only contact import: preview first; no upload until the admin confirms.
+let crmImportRows=[];
+function crmParseCSV(text){
+ const rows=[];let row=[],field='',quoted=false;
+ text=String(text||'').replace(/^\uFEFF/,'');
+ for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){field+='"';i++}else quoted=!quoted}
+ else if(c===','&&!quoted){row.push(field);field=''}
+ else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(field);if(row.some(x=>x.trim()))rows.push(row);row=[];field=''}
+ else field+=c;
+ }
+ if(quoted)throw new Error('ملف CSV يحتوي على علامات اقتباس غير مكتملة');
+ row.push(field);if(row.some(x=>x.trim()))rows.push(row);
+ if(!rows.length)return [];
+ const norm=s=>String(s||'').trim().toLowerCase().replace(/[\s_\-]/g,'');
+ const headers=rows[0].map(norm);
+ const find=(names)=>headers.findIndex(h=>names.includes(h));
+ const nameCol=find(['name','fullname','displayname','الاسم','اسمالعميل','الاسمالكامل','الاسمبالكامل']);
+ const phoneCol=find(['phone','phonenumber','mobile','mobilenumber','telephone','رقمالجوال','الجوال','الهاتف','رقمالهاتف','رقمالموبايل']);
+ if(nameCol<0||phoneCol<0)throw new Error('يجب أن يحتوي CSV على عمود الاسم وعمود رقم الجوال (Name, Phone)');
+ const cityCol=find(['city','المدينة']),districtCol=find(['district','الحي']),roleCol=find(['role','category','التصنيف','الصفة']);
+ return rows.slice(1).map(r=>({full_name:r[nameCol]||'',phone:r[phoneCol]||'',city:r[cityCol]||'',district:r[districtCol]||'',role:r[roleCol]||''}));
+}
+function crmParseVCF(text){
+ const unfolded=String(text||'').replace(/\r\n[ \t]|\n[ \t]/g,'');const cards=unfolded.split(/BEGIN:VCARD/i).slice(1),out=[];
+ for(const card of cards){const body=card.split(/END:VCARD/i)[0],lines=body.split(/\r?\n/);let name='',phone='';
+  for(const line of lines){const pos=line.indexOf(':');if(pos<0)continue;const key=line.slice(0,pos).split(';')[0].toUpperCase(),val=line.slice(pos+1).trim();if(key==='FN'&&!name)name=val.replace(/\\n/gi,' ').replace(/\\,/g,',');if(key==='TEL'&&!phone)phone=val.replace(/^tel:/i,'')}
+  if(name||phone)out.push({full_name:name,phone,city:'',district:'',role:''});
+ }
+ return out;
+}
+function ensureCrmImporter(root){
+ if(root.querySelector('#crmImportPanel'))return;
+ const panel=el('section','crm-import-panel');panel.id='crmImportPanel';panel.append(el('h4','','استيراد جهات الاتصال من الجوال'));
+ panel.append(el('p','', 'اختر ملف VCF من جهات اتصال أندرويد، أو CSV يحتوي على عمودي Name وPhone. ستراجع البيانات قبل حفظها.'));
+ const picker=el('input');picker.type='file';picker.accept='.vcf,.csv,text/vcard,text/csv';picker.setAttribute('aria-label','ملف جهات الاتصال');
+ const role=el('select');role.setAttribute('aria-label','التصنيف الافتراضي');crmRoles.forEach(r=>role.append(crmOption(r,r)));
+ const summary=el('p','crm-import-summary','لم يتم اختيار ملف بعد');const preview=el('div','crm-import-preview');
+ const go=el('button','btn navy','استيراد السجلات الجديدة');go.type='button';go.disabled=true;
+ const controls=el('div','crm-import-controls');controls.append(picker,role,go);panel.append(controls,summary,preview);
+ root.querySelector('.crm-form').insertAdjacentElement('afterend',panel);
+ let pending=[];
+ function prepare(){
+  const seen=new Set(crmContacts.map(c=>crmPhone(c.phone)).filter(Boolean));const local=new Set();let invalid=0,duplicate=0;
+  pending=[];
+  for(const r of crmImportRows){const name=String(r.full_name||'').trim().slice(0,160),phone=crmPhone(r.phone);if(!name||phone.length<9||phone.length>15){invalid++;continue}
+   if(seen.has(phone)||local.has(phone)){duplicate++;continue}local.add(phone);
+   pending.push({full_name:name,phone,role:crmRoles.includes(r.role)?r.role:role.value,city:String(r.city||'').trim().slice(0,160)||null,district:String(r.district||'').trim().slice(0,160)||null});
+  }
+  summary.textContent=`إجمالي السجلات: ${crmImportRows.length} | جاهزة للاستيراد: ${pending.length} | مكررة: ${duplicate} | غير مكتملة: ${invalid}`;
+  preview.replaceChildren();for(const r of pending.slice(0,15)){preview.append(el('div','crm-import-preview-row',`${r.full_name} — ${r.phone} — ${r.role}`))}
+  if(pending.length>15)preview.append(el('small','',`و${pending.length-15} سجلًا إضافيًا`));go.disabled=!pending.length;
+ }
+ picker.onchange=async()=>{
+  crmImportRows=[];pending=[];go.disabled=true;preview.replaceChildren();const file=picker.files?.[0];if(!file){summary.textContent='لم يتم اختيار ملف';return}
+  if(file.size>5*1024*1024){summary.textContent='الملف كبير جدًا (الحد 5 ميجابايت)';return}
+  try{const data=await file.text();crmImportRows=/\.vcf$/i.test(file.name)?crmParseVCF(data):crmParseCSV(data);if(crmImportRows.length>5000)throw new Error('الحد الأقصى 5000 جهة اتصال في الملف الواحد');prepare()}
+  catch(e){summary.textContent='تعذر قراءة الملف: '+e.message;crmImportRows=[]}
+ };
+ role.onchange=()=>{if(crmImportRows.length)prepare()};
+ go.onclick=async()=>{
+  if(!authorized||!pending.length)return;
+  if(!confirm(`هل تريد حفظ ${pending.length} جهة اتصال جديدة في سجل العملاء؟`))return;
+  go.disabled=true;picker.disabled=true;role.disabled=true;let saved=0;let failed=0;
+  // One-by-one inserts avoid partial batch ambiguity and report exact progress.
+  for(const record of pending){const {error}=await db.from('crm_contacts').insert(record);if(error){failed++;console.error('CRM import error:',error)}else saved++;summary.textContent=`جارٍ الاستيراد: تم حفظ ${saved}، تعذر ${failed}`}
+  picker.disabled=false;role.disabled=false;crmImportRows=[];picker.value='';preview.replaceChildren();await loadCrmContacts();summary.textContent=`انتهى الاستيراد: ${saved} محفوظ، ${failed} تعذر حفظه. ${failed?'تحقق من صلاحيات قاعدة البيانات أو صحة السجلات.':''}`;
+ };
+}
+
 function renderCrm(){
  const root=ensureCrmSection(),list=$('crmList'),search=($('crmSearch')?.value||'').trim().toLowerCase(),role=$('crmRoleFilter')?.value||'';list.replaceChildren();
  const found=crmContacts.filter(x=>(!role||x.role===role)&&(!search||[x.full_name,x.phone,x.city,x.district].join(' ').toLowerCase().includes(search)));
