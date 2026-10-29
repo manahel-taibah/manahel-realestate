@@ -206,10 +206,11 @@ function ensureCrmSection(){
  save.disabled=true;const q=key?db.from('crm_contacts').update(data).eq('id',key):db.from('crm_contacts').insert(data);const {error}=await q;save.disabled=false;
  if(error){alert('تعذر حفظ العميل: '+error.message);return}form.reset();form.elements.id.value='';save.textContent='حفظ العميل';await loadCrmContacts();
  };
- ensureCrmImporter(root);
  const tools=el('div','crm-tools'),search=el('input');search.type='search';search.placeholder='بحث بالاسم أو الجوال';search.id='crmSearch';const filter=el('select');filter.id='crmRoleFilter';filter.append(crmOption('','جميع التصنيفات'));crmRoles.forEach(x=>filter.append(crmOption(x,x)));search.oninput=renderCrm;filter.onchange=renderCrm;tools.append(search,filter);
  const count=el('small','crm-count');count.id='crmCount';const items=el('div','crm-list');items.id='crmList';const status=el('p','crm-status');root.append(form,tools,count,items,status);
- const panel=$('manahelAdminContent')||$('adminPanel');panel.append(root);return root;
+ const panel=$('manahelAdminContent')||$('adminPanel');panel.append(root);
+ ensureCrmImporter(root);
+ return root;
 }
 
 // Local-only contact import: preview first; no upload until the admin confirms.
