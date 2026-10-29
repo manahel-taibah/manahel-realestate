@@ -278,3 +278,16 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 
 /* Stage 3: customer request management */
 .request-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 16px}.request-tools input,.request-tools select{min-width:180px;flex:1;border:1px solid #dce3ed;border-radius:10px;padding:12px;background:white;color:#092344;font:inherit}.request-result-count{color:#61728a}.request-item{display:flex;flex-direction:column;gap:10px}.request-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.request-actions select{padding:10px;border:1px solid #dce3ed;border-radius:9px;background:#fff;font:inherit}.request-whatsapp{display:inline-flex;align-items:center;justify-content:center;background:#198c62;color:white!important;border-radius:9px;padding:10px 15px;text-decoration:none}.request-note-label{font-weight:700}.request-memo{width:100%;min-height:80px;border:1px solid #dce3ed;border-radius:10px;padding:12px;font:inherit;box-sizing:border-box;resize:vertical}.request-save{align-self:flex-start;background:#0a2243;color:white;border:0;border-radius:9px;padding:10px 20px;font:inherit;cursor:pointer}.request-save:disabled{opacity:.55}.request-feedback{color:#557083}@media(max-width:750px){.request-tools{flex-direction:column;align-items:stretch}.request-tools input,.request-tools select{width:100%;min-width:0;flex:auto}.request-actions{align-items:stretch}.request-actions>*{flex:1}}
+
+/* CRM module: admin-only */
+.crm-section{margin-top:22px;scroll-margin-top:24px;direction:rtl}
+.crm-intro{color:#66758b}.crm-form{display:grid;gap:14px;margin:18px 0 22px;padding-bottom:20px;border-bottom:1px solid #e5eaf1}
+.crm-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.crm-fields label,.crm-notes-label{display:grid;gap:7px;font-weight:600}
+.crm-fields input,.crm-fields select,.crm-notes-label textarea,.crm-tools input,.crm-tools select,.crm-link-add select{width:100%;min-width:0;padding:12px;border:1px solid #d4dfeb;border-radius:10px;background:white;color:#0b2444}
+.crm-actions,.crm-tools,.crm-link-add{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.crm-tools{margin:14px 0}.crm-tools input{flex:2;min-width:160px}.crm-tools select{flex:1;min-width:150px}
+.crm-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.crm-card{padding:16px;border:1px solid #dbe4ef;border-radius:14px;display:grid;gap:10px;min-width:0}
+.crm-card small{color:#66758b}.crm-card p{margin:0;overflow-wrap:anywhere}.crm-whatsapp{padding:10px 16px;background:#16865f;color:white;border-radius:9px;text-decoration:none}
+.crm-links{display:grid;gap:9px;padding-top:10px;border-top:1px solid #e5eaf1}.crm-linked-row{display:flex;justify-content:space-between;align-items:center;gap:8px}.crm-link-add select{flex:1;min-width:115px}
+@media(max-width:700px){.crm-fields,.crm-list{grid-template-columns:1fr}.crm-section{padding:16px}.crm-link-add{align-items:stretch}.crm-link-add select{min-width:100%}}

@@ -66,7 +66,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -77,7 +77,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests']];
+  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -173,6 +173,57 @@ function renderRequestItems(){
  }
  if(!shown.length)rr.append(el('p','','لا توجد طلبات مطابقة للبحث.'));
 }
+
+// CRM: isolated admin-only module; does not change public listing or request flows.
+let crmContacts=[],crmLinks=[];
+const crmRoles=['مالك عقار','وسيط عقاري','مطور عقاري','مشترٍ','مستثمر','أخرى'];
+function crmOption(value,label){const o=el('option','',label);o.value=value;return o}
+function crmPhone(v){let x=String(v||'').replace(/[^\d]/g,'');if(x.startsWith('00'))x=x.slice(2);if(x.startsWith('0'))x='966'+x.slice(1);return x}
+async function loadCrmContacts(){
+ if(!authorized||!db)return;
+ const root=ensureCrmSection();
+ const [c,l]=await Promise.all([db.from('crm_contacts').select('*').order('created_at',{ascending:false}),db.from('crm_links').select('*')]);
+ if(c.error||l.error){root.querySelector('.crm-status').textContent='تعذر تحميل سجل العملاء. نفّذ ملف crm_database.sql في Supabase أولًا وتحقق من الصلاحيات.';return}
+ crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();
+}
+function ensureCrmSection(){
+ let root=$('crmContactsSection');if(root)return root;
+ root=el('section','form-card crm-section');root.id='crmContactsSection';
+ root.append(el('h3','','سجل العملاء العقاريين'),el('p','crm-intro','إدارة الملاك والوسطاء والمطورين والمشترين والمستثمرين. البيانات خاصة بالمسؤولين.'));
+ const form=el('form','crm-form');form.id='crmContactForm';
+ const id=el('input');id.type='hidden';id.name='id';form.append(id);
+ const fields=el('div','crm-fields');
+ const addField=(title,name,required=false)=>{const label=el('label','',title);const input=el('input');input.name=name;input.maxLength=name==='notes'?2000:160;input.required=required;label.append(input);fields.append(label);return input};
+ addField('اسم العميل *','full_name',true);addField('رقم الجوال *','phone',true);
+ const roleLabel=el('label','','تصنيف العميل *'),role=el('select');role.name='role';crmRoles.forEach(x=>role.append(crmOption(x,x)));roleLabel.append(role);fields.append(roleLabel);
+ addField('المدينة','city');addField('الحي','district');
+ const notesLabel=el('label','crm-notes-label','ملاحظات العميل الداخلية'),notes=el('textarea');notes.name='notes';notes.rows=3;notes.maxLength=2000;notesLabel.append(notes);
+ const actions=el('div','crm-actions'),save=el('button','btn navy','حفظ العميل');save.type='submit';const cancel=el('button','ghost','إلغاء التعديل');cancel.type='button';cancel.onclick=()=>{form.reset();form.elements.id.value='';save.textContent='حفظ العميل'};actions.append(save,cancel);
+ form.append(fields,notesLabel,actions);form.onsubmit=async e=>{
+ e.preventDefault();if(!authorized)return;
+ const fd=new FormData(form),key=String(fd.get('id')||'');const data={full_name:String(fd.get('full_name')||'').trim(),phone:String(fd.get('phone')||'').trim(),role:String(fd.get('role')),city:String(fd.get('city')||'').trim()||null,district:String(fd.get('district')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null};
+ if(!data.full_name||!/^\+?[\d\s-]{8,20}$/.test(data.phone)){alert('تحقق من اسم العميل ورقم الجوال');return}
+ save.disabled=true;const q=key?db.from('crm_contacts').update(data).eq('id',key):db.from('crm_contacts').insert(data);const {error}=await q;save.disabled=false;
+ if(error){alert('تعذر حفظ العميل: '+error.message);return}form.reset();form.elements.id.value='';save.textContent='حفظ العميل';await loadCrmContacts();
+ };
+ const tools=el('div','crm-tools'),search=el('input');search.type='search';search.placeholder='بحث بالاسم أو الجوال';search.id='crmSearch';const filter=el('select');filter.id='crmRoleFilter';filter.append(crmOption('','جميع التصنيفات'));crmRoles.forEach(x=>filter.append(crmOption(x,x)));search.oninput=renderCrm;filter.onchange=renderCrm;tools.append(search,filter);
+ const count=el('small','crm-count');count.id='crmCount';const items=el('div','crm-list');items.id='crmList';const status=el('p','crm-status');root.append(form,tools,count,items,status);
+ const panel=$('manahelAdminContent')||$('adminPanel');panel.append(root);return root;
+}
+function renderCrm(){
+ const root=ensureCrmSection(),list=$('crmList'),search=($('crmSearch')?.value||'').trim().toLowerCase(),role=$('crmRoleFilter')?.value||'';list.replaceChildren();
+ const found=crmContacts.filter(x=>(!role||x.role===role)&&(!search||[x.full_name,x.phone,x.city,x.district].join(' ').toLowerCase().includes(search)));
+ $('crmCount').textContent=`النتائج: ${found.length} من ${crmContacts.length}`;
+ for(const x of found){const card=el('article','crm-card');card.append(el('strong','',x.full_name+' — '+x.role),el('small','',x.phone+' · '+[x.city,x.district].filter(Boolean).join(' / ')));if(x.notes)card.append(el('p','',x.notes));
+ const actions=el('div','crm-actions'),edit=el('button','ghost','تعديل');edit.type='button';edit.onclick=()=>{const form=$('crmContactForm');for(const k of ['id','full_name','phone','role','city','district','notes'])form.elements[k].value=x[k]||'';form.querySelector('[type=submit]').textContent='تحديث العميل';form.scrollIntoView({behavior:'smooth',block:'start'})};actions.append(edit);
+ const number=crmPhone(x.phone);if(number.length>=9&&number.length<=15){const wa=el('a','crm-whatsapp','واتساب');wa.href='https://wa.me/'+number;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
+ const del=el('button','ghost','حذف');del.type='button';del.onclick=async()=>{if(!confirm('هل تريد حذف سجل العميل وروابطه بالعقارات والطلبات؟'))return;const {error}=await db.from('crm_contacts').delete().eq('id',x.id);if(error)alert('تعذر الحذف: '+error.message);else await loadCrmContacts()};actions.append(del);card.append(actions);
+ const links=el('div','crm-links'),heading=el('strong','','الربط بالعقارات والطلبات');links.append(heading);
+ const existing=crmLinks.filter(z=>z.contact_id===x.id);for(const z of existing){const record=z.property_id?listings.find(p=>p.id===z.property_id):requests.find(r=>r.id===z.request_id);const line=el('div','crm-linked-row');line.append(el('span','',(z.property_id?'عقار: ':'طلب: ')+(record?.title||record?.full_name||'سجل مرتبط')));const remove=el('button','ghost','فك الربط');remove.type='button';remove.onclick=async()=>{const {error}=await db.from('crm_links').delete().eq('id',z.id);if(error)alert(error.message);else await loadCrmContacts()};line.append(remove);links.append(line)}
+ const linkRow=el('div','crm-link-add'),kind=el('select');kind.append(crmOption('property','ربط بعقار'),crmOption('request','ربط بطلب'));const target=el('select');const fill=()=>{target.replaceChildren();const rows=kind.value==='property'?listings:requests;target.append(crmOption('','اختر السجل'));for(const r of rows)target.append(crmOption(r.id,r.title||r.full_name||r.id))};kind.onchange=fill;fill();const add=el('button','ghost','ربط');add.type='button';add.onclick=async()=>{if(!target.value)return;const payload={contact_id:x.id,property_id:kind.value==='property'?target.value:null,request_id:kind.value==='request'?target.value:null};const {error}=await db.from('crm_links').insert(payload);if(error)alert('تعذر الربط: '+error.message);else await loadCrmContacts()};linkRow.append(kind,target,add);links.append(linkRow);card.append(links);list.append(card)}
+ if(!found.length)list.append(el('p','','لا توجد سجلات مطابقة.'));
+}
+
 function renderAdmin(){const lp=$('adminListings');lp.replaceChildren();for(const x of listings){const item=el('div','admin-item');item.append(el('strong','',x.title),el('small','',x.city+' · '+format(x.price)+' · '+(x.is_published?'منشور':'مخفي')));const actions=el('div','actions'),edit=el('button','','تعديل'),del=el('button','danger','حذف');edit.onclick=()=>editListing(x);del.onclick=()=>deleteListing(x);actions.append(edit,del);item.append(actions);lp.append(item)}if(!listings.length)lp.append(el('p','','لا توجد عروض بعد.'));const rr=$('adminRequests');
   if(!rr.dataset.enhanced){
     rr.dataset.enhanced='1';
