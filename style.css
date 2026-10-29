@@ -181,3 +181,16 @@ html{scroll-padding-top:120px}
 .property-photo-item:focus-visible{outline:3px solid #c9a95d;outline-offset:3px}
 .property-photos-hint{text-align:center;font-size:.88rem;color:#64748b;margin:4px 0 14px}
 @media(max-width:600px){.property-all-photos{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.property-photo-item{border-radius:9px}.property-photo-item:first-child{aspect-ratio:4/3}}
+
+/* تحسين معرض الصور للجوال - 2026-10-29: تنسيق فقط */
+@media (max-width: 600px) {
+  .property-page-visual { background: #fff; overflow: visible; }
+  .property-all-photos { gap: 7px; margin: 0 0 10px; }
+  .property-photo-item { aspect-ratio: 5 / 3; border-radius: 10px; background: #eef2f6; }
+  .property-photo-item:first-child { aspect-ratio: 16 / 10; }
+  .property-photo-item img { object-fit: cover; }
+  .property-photos-hint { margin: 8px 6px 18px; font-size: 12px; line-height: 1.8; }
+  .property-page-content { margin-top: 8px; }
+  /* صفحة التفاصيل تحتوي على زر استفسار خاص بها؛ إخفاء العائم يمنع تغطية الصور. */
+  body:has(#propertyPage:not([hidden])) > .whatsapp { display: none; }
+}
