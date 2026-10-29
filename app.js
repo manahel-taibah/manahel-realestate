@@ -131,12 +131,42 @@ function renderRequestItems(){
   item.append(actions);
   const notesLabel=el('label','request-note-label','ملاحظات المتابعة الداخلية');const memo=el('textarea','request-memo');memo.rows=2;memo.value=x.follow_up_notes||'';memo.placeholder='سجل تفاصيل التواصل والخطوة القادمة';
   const save=el('button','request-save','حفظ الملاحظات');save.type='button';const feedback=el('small','request-feedback');
-  const originalMemo=String(x.follow_up_notes||'');
-  const updateSaveState=()=>{const changed=memo.value!==originalMemo && memo.value!==String(x.follow_up_notes||'');save.disabled=!changed;save.setAttribute('aria-disabled',String(!changed));if(changed)feedback.textContent='توجد تعديلات لم تُحفظ';};
-  memo.addEventListener('input',updateSaveState);
-  memo.addEventListener('change',updateSaveState);
-  updateSaveState();
-  save.onclick=async()=>{if(save.disabled)return;const value=memo.value;save.disabled=true;feedback.textContent='جارٍ الحفظ...';const stamp=new Date().toISOString();try{const {error}=await db.from('property_requests').update({follow_up_notes:value,updated_at:stamp}).eq('id',x.id);if(error){feedback.textContent='تعذر حفظ الملاحظات: '+error.message;return}x.follow_up_notes=value;x.updated_at=stamp;feedback.textContent='تم حفظ الملاحظات بنجاح';}catch(err){feedback.textContent='تعذر الحفظ: '+(err?.message||'خطأ في الاتصال')}finally{save.disabled=memo.value===String(x.follow_up_notes||'');save.setAttribute('aria-disabled',String(save.disabled));}};
+   // Keep the button state in sync with the current textarea and the last saved value.
+   let savedMemo=String(x.follow_up_notes||'');
+   let saving=false;
+   const updateSaveState=()=>{
+     const changed=memo.value!==savedMemo;
+     save.disabled=saving||!changed;
+     save.setAttribute('aria-disabled',String(save.disabled));
+     // Explicit visual state avoids inherited muted/disabled styles on mobile.
+     save.style.opacity=save.disabled?'0.5':'1';
+     save.style.cursor=save.disabled?'not-allowed':'pointer';
+     save.style.backgroundColor=save.disabled?'#e9edf3':'#0b2444';
+     save.style.color=save.disabled?'#6b7280':'#ffffff';
+     if(!saving)feedback.textContent=changed?'توجد تعديلات لم تُحفظ':'';
+   };
+   memo.addEventListener('input',updateSaveState);
+   memo.addEventListener('change',updateSaveState);
+   save.addEventListener('click',async()=>{
+     if(saving||memo.value===savedMemo)return;
+     saving=true;updateSaveState();feedback.textContent='جارٍ الحفظ...';
+     const value=memo.value,stamp=new Date().toISOString();
+     try{
+       const {data,error}=await db.from('property_requests')
+         .update({follow_up_notes:value,updated_at:stamp})
+         .eq('id',x.id).select('id,follow_up_notes,updated_at').maybeSingle();
+       if(error)throw error;
+       if(!data)throw new Error('لم يتم تأكيد حفظ الطلب. تحقق من صلاحيات التعديل.');
+       savedMemo=String(data.follow_up_notes||'');
+       x.follow_up_notes=savedMemo;x.updated_at=data.updated_at;
+       feedback.textContent='تم حفظ الملاحظات بنجاح';
+     }catch(err){feedback.textContent='تعذر حفظ الملاحظات: '+(err?.message||'خطأ في الاتصال');}
+     finally{
+       saving=false;updateSaveState();
+       if(memo.value===savedMemo)feedback.textContent='تم حفظ الملاحظات بنجاح';
+     }
+   });
+   updateSaveState();
   item.append(notesLabel,memo,save,feedback);
   if(x.updated_at){const d=new Date(x.updated_at);if(!Number.isNaN(d.getTime()))item.append(el('small','',`آخر تحديث: ${d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'})}`))}
   rr.append(item);
