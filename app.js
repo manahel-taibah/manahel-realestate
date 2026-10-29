@@ -104,15 +104,37 @@ $('listingForm').addEventListener('submit',async e=>{
 function propertyLink(id){const u=new URL(window.location.href);u.searchParams.set('property',id);u.hash='';return u.href}
 function navigateProperty(id){const u=new URL(window.location.href);u.searchParams.set('property',id);u.hash='';history.pushState({},'',u);showAdmin(false);renderPropertyRoute();window.scrollTo({top:0,behavior:'smooth'})}
 function leaveProperty(){const u=new URL(window.location.href);u.searchParams.delete('property');u.hash='listings';history.pushState({},'',u);renderPropertyRoute();document.getElementById('listings').scrollIntoView({behavior:'smooth'})}
-function renderPropertyRoute(){
+let propertyRouteVersion=0;
+async function renderPropertyRoute(){
+ const version=++propertyRouteVersion;
  const root=$('propertyPage');if(!root)return;
  const id=new URLSearchParams(window.location.search).get('property');
  const listingSection=$('listings');
  if(!id){root.hidden=true;listingSection.hidden=false;return}
  root.hidden=false;listingSection.hidden=true;root.replaceChildren();
  const back=el('button','ghost','← العودة لجميع العروض');back.type='button';back.onclick=leaveProperty;root.append(back);
- const x=listings.find(p=>String(p.id)===id);
- if(!x){root.append(el('h2','','العقار غير متاح حاليًا'),el('p','','قد يكون العرض غير منشور أو تم حذفه.'));return}
+ const notice=el('p','empty','جارٍ تحميل بيانات العقار...');root.append(notice);
+ let x=listings.find(p=>String(p.id)===id);
+ // A shared link must work without relying on the listings cache or an admin session.
+ if(db){
+  const {data,error}=await db.from('properties').select('*').eq('id',id).eq('is_published',true).maybeSingle();
+  if(version!==propertyRouteVersion)return;
+  if(error){
+   console.error('Property detail query failed:',error);
+   notice.textContent='تعذر تحميل تفاصيل العقار. تحقق من الاتصال وصلاحيات عرض العقارات المنشورة.';
+   return;
+  }
+  x=data;
+  if(x){
+   const {data:photos,error:photosError}=await db.from('property_images').select('*').eq('property_id',id).order('sort_order',{ascending:true});
+   if(version!==propertyRouteVersion)return;
+   if(photosError)console.warn('Could not load additional images:',photosError);
+   else imageRows=[...imageRows.filter(r=>r.property_id!==id),...(photos||[])];
+  }
+ }
+ if(version!==propertyRouteVersion)return;
+ notice.remove();
+ if(!x){root.append(el('h2','','العقار غير متاح حاليًا'),el('p','','لم نعثر على عرض منشور بهذا الرابط. تحقق من الرابط أو حالة نشر العقار.'));return}
  const header=el('div','property-page-heading');header.append(el('span','tag',x.property_type),el('h1','',x.title),el('p','',x.city+(x.district?' · '+x.district:'')),el('div','price',format(x.price)));root.append(header);
  const photos=photosFor(x),visual=el('div','property-page-visual');
  if(photos.length){const img=el('img','property-page-cover');img.src=photos[0].url;img.alt=x.title;img.loading='eager';visual.append(img);const open=el('button','btn navy','عرض جميع الصور ('+photos.length+')');open.type='button';open.onclick=()=>openGallery(x);visual.append(open);const thumbs=el('div','property-page-thumbs');photos.slice(0,6).forEach((p,i)=>{const b=el('button','','');b.type='button';b.setAttribute('aria-label','عرض الصورة '+(i+1));const thumb=el('img');thumb.src=p.url;thumb.alt='صورة '+(i+1);thumb.loading='lazy';b.append(thumb);b.onclick=()=>{openGallery(x);galleryIndex=i;galleryRender()};thumbs.append(b)});visual.append(thumbs)}
