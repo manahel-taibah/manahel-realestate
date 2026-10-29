@@ -95,3 +95,79 @@ html{scroll-padding-top:120px}
 }
 @media(max-width:360px){.hero-actions{grid-template-columns:1fr}.filters{grid-template-columns:1fr}.filters label:last-child{grid-column:auto}.property-page-facts{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}button,a{transition:none}}
+
+/* ==========================================================
+   Manahel Taibah - Mobile refinement phase 2 (2026-10-29)
+   CSS-only: no changes to Supabase, JS, gallery logic or forms.
+   ========================================================== */
+@media (max-width: 750px) {
+  .property-page-visual { background: #fff; }
+  .property-page-cover {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: 440px;
+    aspect-ratio: 4 / 3;
+    object-fit: contain;
+    background: #edf1f5;
+  }
+  .property-page-thumbs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 12px 13px;
+  }
+  .property-page-thumbs::-webkit-scrollbar,
+  .gallery-thumbs::-webkit-scrollbar { display: none; }
+  .property-page-thumbs button { scroll-snap-align: start; flex: 0 0 88px; height: 66px; }
+  .property-page-visual > .btn { position: static; width: calc(100% - 24px); margin: 12px auto 0; min-height: 46px; }
+  .property-page-content { display: flex; flex-direction: column; gap: 14px; }
+  .property-page-aside { order: -1; width: 100%; position: static; }
+  .property-page-main { width: 100%; }
+  .gallery-thumbs { scrollbar-width: none; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  .gallery-thumbs button { scroll-snap-align: start; }
+}
+@media (max-width: 560px) {
+  .header-inner { min-height: 64px; row-gap: 0; }
+  .brand img { width: 44px; height: 44px; }
+  .brand strong { font-size: 15px; }
+  .topbar nav { margin-top: 6px; padding-top: 6px; }
+  .topbar nav a { padding: 7px 5px; min-height: 39px; display: inline-flex; align-items: center; justify-content: center; }
+  .hero-grid { padding-top: 30px; padding-bottom: 34px; }
+  .hero h1 { margin: 10px 0; }
+  .hero-actions { margin: 18px 0; }
+  .hero-actions .btn { min-height: 49px; }
+  .section { padding-top: 42px; padding-bottom: 42px; }
+  .property-page-heading { margin: 12px 0 14px; }
+  .property-page-heading h1 { font-size: clamp(23px, 6.5vw, 29px); }
+  .property-page-cover { max-height: 360px; aspect-ratio: 4 / 3; }
+  .property-page-visual { padding-bottom: 0; }
+  .property-page-visual > .btn { margin-top: 10px; }
+  .property-page-thumbs { gap: 8px; padding: 10px 12px 12px; }
+  .property-page-thumbs button { flex-basis: 86px; height: 64px; }
+  .property-page-content { margin-top: 14px; }
+  .property-page-aside { padding: 15px; gap: 10px; }
+  .property-page-aside .price { margin-bottom: 2px; }
+  .property-page-aside .full { min-height: 49px; }
+  .property-page-facts { gap: 8px; }
+  .property-page-fact { padding: 10px; }
+  .property-page-main { padding: 16px; }
+  /* Keep floating WhatsApp away from phone navigation and form actions. */
+  .whatsapp { left: 12px; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); padding: 9px 12px; font-size: 12px; opacity: .94; }
+  .gallery-dialog { max-height: calc(100dvh - 12px); }
+  .gallery-dialog-inner { padding: 10px; }
+  .gallery-stage img { height: min(52dvh, 420px); }
+  .gallery-thumbs { overflow-x: auto; flex-wrap: nowrap; }
+  .property-actions a, .property-actions button { min-height: 44px; }
+}
+@media (max-width: 380px) {
+  .brand img { width: 40px; height: 40px; }
+  .brand strong { font-size: 14px; }
+  .topbar nav a { font-size: 11px; }
+  .property-page-thumbs button { flex-basis: 78px; height: 60px; }
+}
