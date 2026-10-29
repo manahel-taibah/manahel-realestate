@@ -131,7 +131,12 @@ function renderRequestItems(){
   item.append(actions);
   const notesLabel=el('label','request-note-label','ملاحظات المتابعة الداخلية');const memo=el('textarea','request-memo');memo.rows=2;memo.value=x.follow_up_notes||'';memo.placeholder='سجل تفاصيل التواصل والخطوة القادمة';
   const save=el('button','request-save','حفظ الملاحظات');save.type='button';const feedback=el('small','request-feedback');
-  save.onclick=async()=>{save.disabled=true;feedback.textContent='جارٍ الحفظ...';const stamp=new Date().toISOString();const {error}=await db.from('property_requests').update({follow_up_notes:memo.value,updated_at:stamp}).eq('id',x.id);save.disabled=false;if(error){feedback.textContent='تعذر الحفظ؛ تحقق من صلاحيات التعديل';return}x.follow_up_notes=memo.value;x.updated_at=stamp;feedback.textContent='تم حفظ الملاحظات';};
+  const originalMemo=String(x.follow_up_notes||'');
+  const updateSaveState=()=>{const changed=memo.value!==originalMemo && memo.value!==String(x.follow_up_notes||'');save.disabled=!changed;save.setAttribute('aria-disabled',String(!changed));if(changed)feedback.textContent='توجد تعديلات لم تُحفظ';};
+  memo.addEventListener('input',updateSaveState);
+  memo.addEventListener('change',updateSaveState);
+  updateSaveState();
+  save.onclick=async()=>{if(save.disabled)return;const value=memo.value;save.disabled=true;feedback.textContent='جارٍ الحفظ...';const stamp=new Date().toISOString();try{const {error}=await db.from('property_requests').update({follow_up_notes:value,updated_at:stamp}).eq('id',x.id);if(error){feedback.textContent='تعذر حفظ الملاحظات: '+error.message;return}x.follow_up_notes=value;x.updated_at=stamp;feedback.textContent='تم حفظ الملاحظات بنجاح';}catch(err){feedback.textContent='تعذر الحفظ: '+(err?.message||'خطأ في الاتصال')}finally{save.disabled=memo.value===String(x.follow_up_notes||'');save.setAttribute('aria-disabled',String(save.disabled));}};
   item.append(notesLabel,memo,save,feedback);
   if(x.updated_at){const d=new Date(x.updated_at);if(!Number.isNaN(d.getTime()))item.append(el('small','',`آخر تحديث: ${d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'})}`))}
   rr.append(item);
