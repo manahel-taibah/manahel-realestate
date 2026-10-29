@@ -249,3 +249,29 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
   #adminPanel .dash-stat { padding: 10px; min-height: 88px; }
   #adminPanel .dash-stat-value { font-size: 1.55rem; }
 }
+
+/* Admin mobile: remove excess whitespace under the site navigation.
+   Scoped to admin only; no effect on public pages or database. */
+@media (max-width: 750px) {
+  section#adminView.shell.section:not([hidden]) {
+    padding-top: 8px !important;
+    margin-top: 0 !important;
+  }
+  section#adminView > .section-head {
+    margin-top: 0 !important;
+    margin-bottom: 12px !important;
+    padding-top: 0 !important;
+    min-height: 0 !important;
+  }
+  section#adminView > .section-head .kicker {
+    display: block;
+    margin-top: 0 !important;
+  }
+  section#adminView > .section-head h2 {
+    margin-top: 3px !important;
+    margin-bottom: 0 !important;
+  }
+  section#adminView #adminPanel.manahel-admin-layout {
+    margin-top: 0 !important;
+  }
+}
