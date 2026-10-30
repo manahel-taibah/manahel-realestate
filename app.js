@@ -88,27 +88,54 @@ function setupAdminNavigation(){
 }
 
 // Read-only dashboard: uses the same authorized data already loaded for the admin panel.
+// Stage 11: administrative overview. All figures are derived from already authorized records.
+let dashboardPeriod='all';
 function renderDashboard(){
  const panel=$('adminPanel');if(!panel||!authorized)return;
  let dash=$('manahelDashboard');
- if(!dash){dash=el('section','manahel-dashboard');dash.id='manahelDashboard';dash.setAttribute('aria-label','ملخص لوحة التحكم');
+ if(!dash){dash=el('section','manahel-dashboard stage11-dashboard');dash.id='manahelDashboard';dash.setAttribute('aria-label','لوحة مؤشرات الأعمال');
  const toolbar=panel.querySelector('.admin-toolbar');if(toolbar)toolbar.insertAdjacentElement('afterend',dash);else panel.prepend(dash)}
  dash.replaceChildren();
- const heading=el('div','dash-heading');heading.append(el('h3','','نظرة عامة على النشاط'),el('p','','إحصائيات مباشرة من العقارات والطلبات المسجلة'));dash.append(heading);
- const published=listings.filter(x=>x.is_published===true).length;
- const statuses=[['جديد',requests.filter(x=>!x.status||x.status==='جديد').length],['قيد المتابعة',requests.filter(x=>x.status==='قيد المتابعة').length],['مكتمل',requests.filter(x=>x.status==='مكتمل').length]];
- const cards=el('div','dash-cards');
- for(const [label,value] of [['إجمالي العقارات',listings.length],['العقارات المنشورة',published],['العقارات غير المنشورة',listings.length-published],['إجمالي الطلبات',requests.length],['الطلبات الجديدة',statuses[0][1]],['قيد المتابعة',statuses[1][1]]]){
-  const card=el('div','dash-stat');card.append(el('span','dash-stat-label',label),el('strong','dash-stat-value',String(value)));cards.append(card)}
+ const heading=el('div','dash-heading');
+ const title=el('div');title.append(el('h3','','لوحة مؤشرات مناهل طيبة'),el('p','','ملخص تشغيلي من السجلات المحمّلة والمسموح بعرضها للمدير'));
+ const actions=el('div','stage11-actions');
+ const period=el('select','stage11-period');period.setAttribute('aria-label','الفترة الزمنية');
+ for(const [value,label] of [['all','جميع الفترات'],['30','آخر 30 يومًا'],['90','آخر 90 يومًا'],['365','آخر سنة']]){
+  const op=el('option','',label);op.value=value;period.append(op)}
+ period.value=dashboardPeriod;period.onchange=()=>{dashboardPeriod=period.value;renderDashboard()};
+ const refresh=el('button','ghost','تحديث البيانات');refresh.type='button';refresh.onclick=async()=>{refresh.disabled=true;refresh.textContent='جارٍ التحديث…';try{await loadAdmin()}finally{refresh.disabled=false}};
+ actions.append(period,refresh);heading.append(title,actions);dash.append(heading);
+ const since=dashboardPeriod==='all'?null:Date.now()-Number(dashboardPeriod)*86400000;
+ const within=x=>{if(since===null)return true;const d=Date.parse(x.created_at||'');return Number.isFinite(d)&&d>=since};
+ const p=listings.filter(within),r=requests.filter(within),c=crmContacts.filter(within),d=dealRows.filter(within);
+ const published=p.filter(x=>x.is_published===true).length;
+ const newRequests=r.filter(x=>!x.status||x.status==='جديد').length;
+ const followups=r.filter(x=>x.status==='قيد المتابعة').length;
+ const completed=d.filter(x=>x.stage==='مكتملة').length;
+ const active=d.filter(x=>!['مكتملة','ملغاة'].includes(x.stage)).length;
+ const cards=el('div','dash-cards stage11-cards');
+ for(const [label,value,hint] of [
+  ['جهات الاتصال',c.length,'سجل العملاء'],['العقارات',p.length,`${published} منشور`],
+  ['طلبات العملاء',r.length,`${newRequests} جديد`],['الصفقات',d.length,`${active} نشطة`],
+  ['الصفقات المكتملة',completed,'حسب مرحلة الصفقة'],['طلبات قيد المتابعة',followups,'تحتاج متابعة']]){
+  const card=el('div','dash-stat stage11-stat');card.append(el('span','dash-stat-label',label),el('strong','dash-stat-value',String(value)),el('small','stage11-hint',hint));cards.append(card)}
  dash.append(cards);
- const sections=el('div','dash-sections');
- const statusBox=el('div','dash-panel');statusBox.append(el('h4','','حالات الطلبات'));
- for(const [name,count] of statuses){const line=el('div','dash-status-row');line.append(el('span','',name),el('b','',String(count)));const track=el('div','dash-track');const fill=el('div','dash-fill');fill.style.width=(requests.length?Math.round(count/requests.length*100):0)+'%';track.append(fill);statusBox.append(line,track)}
- const latest=el('div','dash-panel');latest.append(el('h4','','أحدث العقارات المضافة'));
- const recent=listings.slice().sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).slice(0,5);
- if(!recent.length)latest.append(el('p','dash-empty','لا توجد عقارات مسجلة بعد.'));
- for(const x of recent){const line=el('div','dash-recent');line.append(el('strong','',x.title||'عقار بدون عنوان'),el('span','',x.is_published?'منشور':'غير منشور'));latest.append(line)}
- sections.append(statusBox,latest);dash.append(sections);
+ const sections=el('div','dash-sections stage11-sections');
+ const makePanel=title=>{const box=el('div','dash-panel');box.append(el('h4','',title));return box};
+ const barPanel=(title,rows,total)=>{const box=makePanel(title);if(!rows.length){box.append(el('p','dash-empty','لا توجد بيانات لهذه الفترة.'));return box}
+  for(const [name,count] of rows){const line=el('div','dash-status-row');line.append(el('span','',name),el('b','',String(count)));const track=el('div','dash-track');const fill=el('div','dash-fill');fill.style.width=(total?Math.round(count/total*100):0)+'%';track.append(fill);box.append(line,track)}return box};
+ const group=(items,key)=>{const counts=new Map();for(const x of items){const name=String(x[key]||'غير محدد').trim()||'غير محدد';counts.set(name,(counts.get(name)||0)+1)}return [...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6)};
+ sections.append(barPanel('العقارات حسب النوع',group(p,'property_type'),p.length));
+ sections.append(barPanel('حالات طلبات العملاء',group(r,'status'),r.length));
+ sections.append(barPanel('مراحل الصفقات',group(d,'stage'),d.length));
+ sections.append(barPanel('المدن الأكثر نشاطًا',group(p,'city'),p.length));
+ const recent=makePanel('أحدث العقارات المضافة');
+ const latest=p.slice().sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).slice(0,5);
+ if(!latest.length)recent.append(el('p','dash-empty','لا توجد عقارات مسجلة لهذه الفترة.'));
+ for(const x of latest){const line=el('div','dash-recent');line.append(el('strong','',x.title||'عقار بدون عنوان'),el('span','',x.is_published?'منشور':'غير منشور'));recent.append(line)}
+ sections.append(recent);dash.append(sections);
+ const note=el('p','stage11-note','تعكس المؤشرات السجلات المحمّلة في لوحة الإدارة وفق صلاحيات الدخول؛ وقد تختلف عن إجمالي قاعدة البيانات إذا تجاوزت النتائج حدود جلب Supabase. الفلترة بحسب تاريخ إنشاء السجل.');
+ dash.append(note);
 }
 function renderRequestItems(){
  const rr=$('adminRequests');if(!rr)return;
@@ -246,7 +273,7 @@ async function loadCrmContacts(){
  const root=ensureCrmSection();
  const [c,l]=await Promise.all([db.from('crm_contacts').select('*').order('created_at',{ascending:false}),db.from('crm_links').select('*')]);
  if(c.error||l.error){root.querySelector('.crm-status').textContent='تعذر تحميل سجل العملاء. نفّذ ملف crm_database.sql في Supabase أولًا وتحقق من الصلاحيات.';return}
- crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();
+ crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderDashboard();
 }
 function ensureCrmSection(){
  let root=$('crmContactsSection');if(root)return root;
@@ -352,7 +379,7 @@ function ensureCrmImporter(root){
  function prepare(){
   const seen=new Set(crmContacts.map(c=>crmPhone(c.phone)).filter(Boolean));const local=new Set();let invalid=0,duplicate=0;
   pending=[];
-  for(const r of crmImportRows){const name=String(r.full_name||'').trim().slice(0,160),phone=crmPhone(r.phone);if(!name||phone.length<9||phone.length>15||/(?:=[0-9A-F]{2}){2,}/i.test(name)||name.includes('�')){invalid++;continue}
+  for(const r of crmImportRows){const name=String(r.full_name||'').trim().slice(0,160),phone=crmPhone(r.phone);if(!name||phone.length<9||phone.length>15||/(?:=[0-9A-F]{2}){2,}/i.test(name)||name.includes(' ')){invalid++;continue}
    if(seen.has(phone)||local.has(phone)){duplicate++;continue}local.add(phone);
    pending.push({full_name:name,phone,role:crmRoles.includes(r.role)?r.role:role.value,city:String(r.city||'').trim().slice(0,160)||null,district:String(r.district||'').trim().slice(0,160)||null});
   }
@@ -572,7 +599,7 @@ async function loadDeals(){
  const {data,error}=await db.from('real_estate_deals').select('*').order('created_at',{ascending:false});
  const msg=root.querySelector('.deals-feedback');
  if(error){msg.textContent='تعذر تحميل الصفقات: '+error.message+' — نفّذ ملف stage8_database.sql أولًا.';return}
- msg.textContent='';dealRows=data||[];renderDeals();renderStage9Reports();
+ msg.textContent='';dealRows=data||[];renderDeals();renderStage9Reports();renderDashboard();
 }
 function ensureDealsSection(){
  let root=$('manahelDealsSection');if(root)return root;
