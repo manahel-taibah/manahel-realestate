@@ -364,3 +364,16 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 .stage11-sections{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
 .stage11-note{color:#64748b;font-size:12px;line-height:1.8;margin:14px 0 0}
 @media(max-width:600px){.stage11-actions{width:100%}.stage11-actions button,.stage11-period{flex:1}}
+
+/* Stage 12 - follow-up tasks */
+.followup-section{margin-block:24px;scroll-margin-top:25px}
+.followup-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px;margin:16px 0}
+.followup-stat{border:1px solid #dce3e8;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:5px}
+.followup-stat span{font-size:13px;color:#607185}.followup-stat strong{font-size:24px;color:#17324d}
+.followup-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px}
+.followup-form label{display:flex;flex-direction:column;gap:6px}
+.followup-form input,.followup-form select,.followup-form textarea,.followup-filters input,.followup-filters select{width:100%;max-width:100%;padding:10px;border:1px solid #ccd6df;border-radius:9px;background:white;color:#17324d}
+.followup-filters{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 12px}.followup-filters>*{flex:1;min-width:180px}
+.followup-list{display:grid;gap:10px}.followup-item{border:1px solid #dce3e8;border-radius:12px;padding:14px;display:grid;gap:8px;overflow-wrap:anywhere}
+.followup-overdue{border-inline-start:4px solid #b45309}.followup-item small{color:#66788c}.followup-item p{margin:0}
+.followup-actions{display:flex;flex-wrap:wrap;gap:8px}.followup-message{color:#8a341c;overflow-wrap:anywhere}
