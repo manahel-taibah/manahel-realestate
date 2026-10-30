@@ -589,13 +589,6 @@ loadPublic();
 
 // Stage 8: private deal pipeline, commission tracking and collections.
 let dealRows=[];
-let dealCollections=[];
-const dealCommission=x=>x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;
-const dealLegacyPaid=x=>Number(x.collected_amount)||0;
-const dealLedgerPaid=id=>dealCollections.filter(x=>x.deal_id===id).reduce((n,x)=>n+(Number(x.amount)||0),0);
-const dealTotalPaid=x=>dealLegacyPaid(x)+dealLedgerPaid(x.id);
-const dealRemaining=x=>Math.max(0,dealCommission(x)-dealTotalPaid(x));
-
 const dealStages=['عرض العقار','معاينة','تفاوض','اتفاق مبدئي','إفراغ','مكتملة','ملغاة'];
 const dealMoney=n=>new Intl.NumberFormat('ar-SA',{maximumFractionDigits:2}).format(Number(n)||0)+' ريال';
 function dealField(label,name,type='text',value=''){
@@ -616,10 +609,7 @@ async function loadDeals(){
  const {data,error}=await db.from('real_estate_deals').select('*').order('created_at',{ascending:false});
  const msg=root.querySelector('.deals-feedback');
  if(error){msg.textContent='تعذر تحميل الصفقات: '+error.message+' — نفّذ ملف stage8_database.sql أولًا.';return}
- dealRows=data||[];
- const payments=await db.from('deal_collections').select('*').order('paid_on',{ascending:false}).order('created_at',{ascending:false});
- if(payments.error){dealCollections=[];msg.textContent='تعذر تحميل دفعات التحصيل: '+payments.error.message+' — لن تُعرض أرقام التحصيل حتى تُحل المشكلة.';root.querySelector('.deals-summary').replaceChildren();root.querySelector('.deals-list').replaceChildren();return}
- dealCollections=payments.data||[];msg.textContent='';renderDeals();renderStage9Reports();renderDashboard();
+ msg.textContent='';dealRows=data||[];renderDeals();renderStage9Reports();renderDashboard();
 }
 function ensureDealsSection(){
  let root=$('manahelDealsSection');if(root)return root;
@@ -638,7 +628,7 @@ function ensureDealsSection(){
  field('السعر المتفق عليه (ريال)','agreed_price','number');
  field('نسبة السعي %','commission_rate','number','2.5');
  field('قيمة السعي المتفق عليها (ريال) — اختيارية','commission_override','number');
- field('تحصيل سابق قبل سجل الدفعات (ريال)','collected_amount','number','0');
+ field('المبلغ المحصل (ريال)','collected_amount','number','0');
  field('موعد المتابعة','next_follow_up','date');
  field('ملاحظات المتابعة','notes');
  fields.property_id.required=true;
@@ -654,9 +644,7 @@ function ensureDealsSection(){
  save.type='submit';reset.type='button';reset.onclick=()=>{form.reset();fields.id.value='';fields.stage.value='عرض العقار';fields.commission_rate.value='2.5';save.textContent='حفظ الصفقة'};
  actions.append(save,reset);form.append(grid,actions);
  const preview=el('p','deals-preview');
- function updatePreview(){const base=Number(fields.agreed_price.value)||0;const rate=Number(fields.commission_rate.value)||0;const override=fields.commission_override.value.trim();const commission=override!==''?Number(override):base*rate/100;const legacy=Number(fields.collected_amount.value)||0;
- const id=fields.id.value;const ledger=id?dealLedgerPaid(id):0;
- preview.textContent='السعي المتوقع: '+dealMoney(commission)+' | التحصيل السابق: '+dealMoney(legacy)+' | الدفعات المسجلة: '+dealMoney(ledger)+' | المحصل الإجمالي: '+dealMoney(legacy+ledger)+' | المتبقي: '+dealMoney(Math.max(0,commission-legacy-ledger))}
+ function updatePreview(){const base=Number(fields.agreed_price.value)||0;const rate=Number(fields.commission_rate.value)||0;const override=fields.commission_override.value.trim();const commission=override!==''?Number(override):base*rate/100;const collected=Number(fields.collected_amount.value)||0;preview.textContent='السعي المتوقع: '+dealMoney(commission)+' | المحصل: '+dealMoney(collected)+' | المتبقي: '+dealMoney(Math.max(0,commission-collected))}
  form.addEventListener('input',updatePreview);updatePreview();form.append(preview);
  const feedback=el('p','deals-feedback');const summary=el('div','deals-summary'),list=el('div','deals-list');
  root.append(form,feedback,summary,list);
@@ -667,12 +655,7 @@ function ensureDealsSection(){
   const num=(key)=>{const v=String(f.get(key)||'').trim();return v===''?null:Number(v)};
   const payload={property_id:f.get('property_id'),contact_id:f.get('contact_id')||null,request_id:f.get('request_id')||null,stage:f.get('stage'),asking_price:num('asking_price'),agreed_price:num('agreed_price'),commission_rate:num('commission_rate')??0,commission_override:num('commission_override'),collected_amount:num('collected_amount')??0,next_follow_up:f.get('next_follow_up')||null,notes:String(f.get('notes')||'').trim()||null};
   if(!payload.property_id){feedback.textContent='اختر العقار أولًا';return}
-  const commission=payload.commission_override??((payload.agreed_price||0)*(payload.commission_rate||0)/100);
-  const ledger=id?dealLedgerPaid(id):0;
-  if(payload.collected_amount+ledger>commission+0.005){feedback.textContent='إجمالي التحصيل السابق والدفعات يتجاوز قيمة السعي؛ راجع المبالغ.';return}
-  if(id&&dealLedgerPaid(id)>0&&payload.collected_amount!==dealLegacyPaid(dealRows.find(x=>x.id===id)||{})){
-   feedback.textContent='لا يمكن تعديل التحصيل السابق بعد تسجيل دفعات جديدة. صحح الدفعات من سجلها أو راجع الإدارة.';return
-  }
+  if(payload.commission_override!==null&&payload.collected_amount>payload.commission_override){feedback.textContent='المبلغ المحصل أكبر من قيمة السعي المحددة';return}
   save.disabled=true;feedback.textContent='جارٍ الحفظ...';
   const {error}=id?await db.from('real_estate_deals').update(payload).eq('id',id):await db.from('real_estate_deals').insert(payload);
   save.disabled=false;
@@ -692,13 +675,13 @@ function renderDeals(){
  const summary=root.querySelector('.deals-summary'),list=root.querySelector('.deals-list');summary.replaceChildren();list.replaceChildren();
  const active=dealRows.filter(x=>!['مكتملة','ملغاة'].includes(x.stage)).length;
  const completed=dealRows.filter(x=>x.stage==='مكتملة').length;
- const collected=dealRows.reduce((sum,x)=>sum+dealTotalPaid(x),0);
+ const collected=dealRows.reduce((sum,x)=>sum+(Number(x.collected_amount)||0),0);
  summary.append(el('strong','',`إجمالي الصفقات: ${dealRows.length}`),el('strong','',`النشطة: ${active}`),el('strong','',`المكتملة: ${completed}`),el('strong','',`المحصل: ${dealMoney(collected)}`));
  for(const x of dealRows){
   const property=listings.find(p=>p.id===x.property_id),contact=crmContacts.find(c=>c.id===x.contact_id);
-  const base=Number(x.agreed_price)||0,commission=dealCommission(x),paid=dealTotalPaid(x);
+  const base=Number(x.agreed_price)||0,commission=x.commission_override==null?base*(Number(x.commission_rate)||0)/100:Number(x.commission_override),paid=Number(x.collected_amount)||0;
   const card=el('article','deal-card');
-  card.append(el('strong','',property?.title||'عقار غير متاح'),el('small','',`المرحلة: ${x.stage} | العميل: ${contact?.name||contact?.full_name||'غير محدد'}`),el('p','',`السعر المتفق عليه: ${dealMoney(base)} | السعي: ${dealMoney(commission)} | المحصل الإجمالي: ${dealMoney(paid)} | المتبقي: ${dealMoney(Math.max(0,commission-paid))}`),el('small','',`تحصيل سابق: ${dealMoney(dealLegacyPaid(x))} | دفعات جديدة: ${dealMoney(dealLedgerPaid(x.id))}`));
+  card.append(el('strong','',property?.title||'عقار غير متاح'),el('small','',`المرحلة: ${x.stage} | العميل: ${contact?.name||contact?.full_name||'غير محدد'}`),el('p','',`السعر المتفق عليه: ${dealMoney(base)} | السعي: ${dealMoney(commission)} | المحصل: ${dealMoney(paid)} | المتبقي: ${dealMoney(Math.max(0,commission-paid))}`));
   if(x.next_follow_up)card.append(el('small','',`المتابعة القادمة: ${x.next_follow_up}`));
   if(x.notes)card.append(el('p','',x.notes));
   const actions=el('div','deals-actions'),edit=el('button','ghost','تعديل'),del=el('button','ghost','حذف');
@@ -707,65 +690,9 @@ function renderDeals(){
   del.onclick=async()=>{if(!confirm('هل تريد حذف الصفقة نهائيًا؟'))return;const {error}=await db.from('real_estate_deals').delete().eq('id',x.id);if(error)alert(error.message);else await loadDeals()};
   actions.append(edit,del);
   const phone=crmPhone(contact?.phone||'');if(phone.length>=9&&phone.length<=15){const wa=el('a','deal-whatsapp','واتساب العميل');wa.href='https://wa.me/'+phone;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
-  card.append(actions);card.append(dealCollectionPanel(x));list.append(card);
+  card.append(actions);list.append(card);
  }
  if(!dealRows.length)list.append(el('p','','لا توجد صفقات بعد. أضف أول صفقة من النموذج أعلاه.'));
-}
-
-
-// Stage 15 — itemized collections, separate from the legacy opening balance.
-function dealCollectionPanel(deal){
- const section=el('details','deal-collections');
- section.append(el('summary','','دفعات التحصيل ('+dealCollections.filter(p=>p.deal_id===deal.id).length+')'));
- const body=el('div','deal-collections-body');
- body.append(el('p','deal-collections-note','التحصيل السابق قبل هذه المرحلة: '+dealMoney(dealLegacyPaid(deal))+'. لا تعِد إدخاله كدفعة جديدة.'));
- const payments=dealCollections.filter(p=>p.deal_id===deal.id);
- for(const p of payments){
-  const item=el('div','deal-payment-row');
-  item.append(el('span','',`${dealMoney(p.amount)} | ${p.paid_on} | ${p.payment_method||'—'}${p.reference_number?' | مرجع: '+p.reference_number:''}`));
-  if(p.notes)item.append(el('small','',p.notes));
-  const remove=el('button','ghost','حذف الدفعة');remove.type='button';
-  remove.onclick=async()=>{
-   if(!authorized||!confirm('حذف دفعة '+dealMoney(p.amount)+'؟ لا يمكن التراجع عن هذا الإجراء.'))return;
-   remove.disabled=true;
-   const {error}=await db.from('deal_collections').delete().eq('id',p.id);
-   if(error){alert('تعذر حذف الدفعة: '+error.message);remove.disabled=false;return}
-   await loadDeals();
-  };
-  item.append(remove);body.append(item);
- }
- if(!payments.length)body.append(el('p','','لم تُسجّل دفعات جديدة لهذه الصفقة.'));
- const form=el('form','deal-collection-form');
- const fields={};
- function add(label,name,type='text',value=''){
-  const wrap=el('label','',label),input=el('input');
-  input.name=name;input.type=type;if(value)input.value=value;
-  wrap.append(input);form.append(wrap);fields[name]=input;return input;
- }
- const amount=add('مبلغ الدفعة (ريال)','amount','number');amount.required=true;amount.min='0.01';amount.step='0.01';
- const date=add('تاريخ التحصيل','paid_on','date',[new Date().getFullYear(),String(new Date().getMonth()+1).padStart(2,'0'),String(new Date().getDate()).padStart(2,'0')].join('-'));date.required=true;
- const wrap=el('label','','طريقة السداد'),method=el('select');method.name='payment_method';
- for(const x of ['تحويل بنكي','نقدًا','شبكة','شيك','أخرى'])method.append(new Option(x,x));
- wrap.append(method);form.append(wrap);
- const ref=add('رقم المرجع (اختياري)','reference_number');ref.maxLength=120;
- const notes=add('ملاحظات الدفعة (اختياري)','notes');notes.maxLength=2000;
- const submit=el('button','','تسجيل الدفعة');submit.type='submit';
- const status=el('p','deal-collection-feedback');status.setAttribute('role','status');
- form.append(submit,status);
- form.addEventListener('submit',async e=>{
-  e.preventDefault();if(!authorized)return;
-  const value=Number(amount.value);
-  if(!Number.isFinite(value)||value<=0){status.textContent='أدخل مبلغًا صحيحًا أكبر من الصفر.';return}
-  const remaining=dealRemaining(deal);
-  if(value>remaining+0.005){status.textContent='المبلغ يتجاوز المتبقي من السعي: '+dealMoney(remaining);return}
-  if(!date.value){status.textContent='حدد تاريخ التحصيل.';return}
-  submit.disabled=true;status.textContent='جارٍ تسجيل الدفعة...';
-  const payload={deal_id:deal.id,amount:value,paid_on:date.value,payment_method:method.value,reference_number:ref.value.trim()||null,notes:notes.value.trim()||null};
-  const {error}=await db.from('deal_collections').insert(payload);
-  if(error){status.textContent='تعذر تسجيل الدفعة: '+error.message;submit.disabled=false;return}
-  await loadDeals();
- });
- body.append(form);section.append(body);return section;
 }
 
 
@@ -782,7 +709,7 @@ function stage9Metrics(){
  const root=$('manahelReportsSection'),start=root?.querySelector('[name=stage9Start]')?.value||'',end=root?.querySelector('[name=stage9End]')?.value||'';
  const p=listings.filter(x=>stage9Within(x,start,end)),r=requests.filter(x=>stage9Within(x,start,end)),c=crmContacts.filter(x=>stage9Within(x,start,end)),d=dealRows.filter(x=>stage9Within(x,start,end));
  const commission=x=>x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;
- const total=d.reduce((n,x)=>n+commission(x),0),collected=d.reduce((n,x)=>n+dealTotalPaid(x),0);
+ const total=d.reduce((n,x)=>n+commission(x),0),collected=d.reduce((n,x)=>n+(Number(x.collected_amount)||0),0);
  const group=(rows,field,fallback)=>Object.entries(rows.reduce((acc,x)=>{const key=String(x[field]||fallback);acc[key]=(acc[key]||0)+1;return acc},{})).sort((a,b)=>b[1]-a[1]);
  return {start,end,p,r,c,d,total,collected,remaining:Math.max(0,total-collected),propertyTypes:group(p,'property_type','غير محدد'),requestStatuses:group(r,'status','جديد'),dealStages:group(d,'stage','غير محدد')};
 }
@@ -798,7 +725,7 @@ function stage9ExportRows(m){
  for(const x of m.p)rows.push(['العقارات',x.title||'',x.property_type||'',x.created_at||'']);
  for(const x of m.r)rows.push(['الطلبات',x.full_name||'',x.status||'جديد',x.created_at||'']);
  for(const x of m.c)rows.push(['العملاء',x.full_name||'',x.role||'',x.created_at||'']);
- for(const x of m.d){const name=m.p.find(p=>p.id===x.property_id)?.title||listings.find(p=>p.id===x.property_id)?.title||'عقار غير متاح';const fee=x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;rows.push(['الصفقات',name+' | '+x.stage,'السعي: '+fee+' | المحصل: '+dealTotalPaid(x),x.created_at||''])}
+ for(const x of m.d){const name=m.p.find(p=>p.id===x.property_id)?.title||listings.find(p=>p.id===x.property_id)?.title||'عقار غير متاح';const fee=x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;rows.push(['الصفقات',name+' | '+x.stage,'السعي: '+fee+' | المحصل: '+(Number(x.collected_amount)||0),x.created_at||''])}
  return rows;
 }
 function stage9ExportCsv(){
@@ -1007,3 +934,4 @@ function renderMarketing(){
  form.querySelector('button[type=submit]').textContent='حفظ المتابعة';
  form.scrollIntoView({behavior:'smooth',block:'start'});message.textContent='تم تجهيز مهمة المتابعة. اضغط حفظ المتابعة لتسجيلها في Supabase.'};
  actions.append(open,copy,task);root.append(actions);
+}
