@@ -377,3 +377,14 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 .followup-list{display:grid;gap:10px}.followup-item{border:1px solid #dce3e8;border-radius:12px;padding:14px;display:grid;gap:8px;overflow-wrap:anywhere}
 .followup-overdue{border-inline-start:4px solid #b45309}.followup-item small{color:#66788c}.followup-item p{margin:0}
 .followup-actions{display:flex;flex-wrap:wrap;gap:8px}.followup-message{color:#8a341c;overflow-wrap:anywhere}
+
+/* Stage 13: manual WhatsApp Web marketing workspace */
+.marketing-section{margin-block:24px;scroll-margin-top:24px;direction:rtl}
+.marketing-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.marketing-fields label,.marketing-draft-label{display:flex;flex-direction:column;gap:7px;font-weight:650;color:#092346}
+.marketing-fields select,.marketing-fields input,.marketing-draft{width:100%;max-width:100%;box-sizing:border-box;padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;font:inherit;color:#092346}
+.marketing-draft{min-height:170px;resize:vertical;line-height:1.8;direction:rtl}
+.marketing-note,.marketing-feedback{font-size:.9rem;color:#52627a;line-height:1.8}
+.marketing-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.marketing-actions button{min-height:44px}
+@media(max-width:700px){.marketing-fields{grid-template-columns:1fr}.marketing-actions button{width:100%}}
