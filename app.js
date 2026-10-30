@@ -66,8 +66,8 @@ function showAdmin(open){$('publicView').hidden=open;$('adminView').hidden=!open
 $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdmin(false);
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
-$('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();}
+$('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const marketing=$('manahelMarketingSection');if(marketing)marketing.replaceChildren();const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();renderMarketing();}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -273,7 +273,7 @@ async function loadCrmContacts(){
  const root=ensureCrmSection();
  const [c,l]=await Promise.all([db.from('crm_contacts').select('*').order('created_at',{ascending:false}),db.from('crm_links').select('*')]);
  if(c.error||l.error){root.querySelector('.crm-status').textContent='تعذر تحميل سجل العملاء. نفّذ ملف crm_database.sql في Supabase أولًا وتحقق من الصلاحيات.';return}
- crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderDashboard();
+ crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
 }
 function ensureCrmSection(){
  let root=$('crmContactsSection');if(root)return root;
@@ -862,4 +862,66 @@ function renderFollowups(){
   const actions=el('div','followup-actions');const edit=el('button','ghost','تعديل');edit.type='button';edit.onclick=()=>{for(const key of ['id','title','contact_id','property_id','request_id','priority','status','channel','notes','outcome'])form.elements[key].value=x[key]||'';form.elements.due_at.value=followupLocal(x.due_at);form.querySelector('button[type=submit]').textContent='حفظ التعديل';form.scrollIntoView({behavior:'smooth',block:'start'})};actions.append(edit);
   if(x.status!=='مكتملة'){const done=el('button','ghost','إكمال');done.type='button';done.onclick=async()=>{done.disabled=true;const {error}=await db.from('crm_followups').update({status:'مكتملة',updated_at:new Date().toISOString()}).eq('id',x.id);if(error){root.querySelector('.followup-message').textContent=error.message;done.disabled=false}else await loadFollowups()};actions.append(done)}
   const del=el('button','ghost','حذف');del.type='button';del.onclick=async()=>{if(!confirm('هل تريد حذف مهمة المتابعة؟'))return;const {error}=await db.from('crm_followups').delete().eq('id',x.id);if(error)root.querySelector('.followup-message').textContent=error.message;else await loadFollowups()};actions.append(del);card.append(actions);list.append(card)}
+}
+
+
+// Stage 13: human-reviewed WhatsApp Web messages, without automated sending.
+const marketingTemplates=[
+ ['owner','استفسار من مالك','السلام عليكم {الاسم}، معكم مؤسسة مناهل طيبة للمقاولات والعقارات. نود الاستفسار هل عرضكم العقاري ما زال متاحًا؟ ويسعدنا التعاون بعقد وساطة وتسويق احترافي يشمل التصوير والفيديو.'],
+ ['buyer','عرض لمشترٍ','السلام عليكم {الاسم}، معكم مؤسسة مناهل طيبة للمقاولات والعقارات. لدينا عرض عقاري قد يناسب طلبكم:\n{العقار}\n{الرابط}\nيسعدنا استقبال استفساراتكم.'],
+ ['investor','فرصة استثمارية','السلام عليكم {الاسم}، معكم مؤسسة مناهل طيبة للمقاولات والعقارات. نود مشاركتكم فرصة عقارية قد تناسب اهتماماتكم:\n{العقار}\n{الرابط}\nيسعدنا التواصل لمناقشة التفاصيل.'],
+ ['broker','تعاون مع وسيط','السلام عليكم {الاسم}، معكم مؤسسة مناهل طيبة للمقاولات والعقارات. نرحب بالتعاون المهني في تسويق العروض وتلبية الطلبات العقارية وفق الأنظمة والعقود اللازمة.'],
+ ['followup','متابعة سابقة','السلام عليكم {الاسم}، نتابع معكم بخصوص التواصل السابق بشأن {العقار}. هل هناك أي مستجدات أو استفسارات يمكننا المساعدة فيها؟']
+];
+let marketingDraft='';
+function marketingWebPhone(raw){
+ const digits=crmPhone(raw);
+ // Saudi mobile numbers must be 9665XXXXXXXX; international E.164 numbers are accepted.
+ return /^(9665\d{8}|[1-9]\d{8,14})$/.test(digits)?digits:'';
+}
+function renderMarketing(){
+ if(!authorized||!db)return;
+ let root=$('manahelMarketingSection');
+ if(!root){root=el('section','form-card marketing-section');root.id='manahelMarketingSection';
+ const target=$('manahelFollowupsSection')||$('manahelDealsSection')||$('manahelAdminContent')||$('adminPanel');
+ target.insertAdjacentElement('afterend',root)}
+ root.replaceChildren();
+ root.append(el('h3','','التسويق العقاري عبر واتساب ويب'),el('p','marketing-note','اختر عميلًا وقالبًا، ثم راجع الرسالة قبل فتح واتساب ويب. الإرسال يدوي فقط، ولا يُسجّل إرسال تلقائي.'));
+ const grid=el('div','marketing-fields');
+ const field=(label,tag='select')=>{const wrap=el('label','',label),input=el(tag);wrap.append(input);grid.append(wrap);return input};
+ const search=field('البحث عن عميل','input');search.type='search';search.placeholder='اسم العميل أو رقمه';
+ const role=field('تصنيف العميل');role.append(crmOption('','جميع التصنيفات'));crmRoles.forEach(x=>role.append(crmOption(x,x)));
+ const contact=field('جهة الاتصال');contact.setAttribute('aria-label','جهة الاتصال');
+ const template=field('قالب الرسالة');marketingTemplates.forEach(x=>template.append(crmOption(x[0],x[1])));
+ const property=field('العقار (اختياري)');property.append(crmOption('','بدون عقار'));listings.forEach(x=>property.append(crmOption(x.id,x.title||x.id)));
+ const fillContacts=()=>{const old=contact.value;const q=search.value.trim().toLowerCase();contact.replaceChildren(crmOption('','اختر العميل'));for(const x of crmContacts.filter(x=>(!role.value||x.role===role.value)&&(!q||[x.full_name,x.phone].join(' ').toLowerCase().includes(q))).slice(0,1000))contact.append(crmOption(x.id,`${x.full_name} — ${x.phone}`));if([...contact.options].some(x=>x.value===old))contact.value=old};
+ search.oninput=fillContacts;role.onchange=fillContacts;fillContacts();
+ root.append(grid);
+ const draftLabel=el('label','marketing-draft-label','نص الرسالة — قابل للتعديل قبل فتح المحادثة');
+ const draft=el('textarea','marketing-draft');draft.rows=7;draft.maxLength=3500;draftLabel.append(draft);root.append(draftLabel);
+ const hint=el('p','marketing-note','يتم فتح المحادثة في تبويب جديد؛ راجع الرقم والنص ثم اضغط إرسال بنفسك. فتح الرابط لا يعني أن الرسالة أُرسلت.');
+ const message=el('p','marketing-feedback');message.setAttribute('role','status');root.append(hint,message);
+ const updateDraft=()=>{const c=crmContacts.find(x=>x.id===contact.value),p=listings.find(x=>x.id===property.value);
+ const raw=marketingTemplates.find(x=>x[0]===template.value)?.[2]||'';
+ draft.value=raw.replaceAll('{الاسم}',c?.full_name||'').replaceAll('{العقار}',p?.title||'العقار محل الاهتمام').replaceAll('{الرابط}',p?propertyLink(p.id):'').trim()};
+ contact.onchange=updateDraft;template.onchange=updateDraft;property.onchange=updateDraft;updateDraft();
+ const actions=el('div','marketing-actions');
+ const open=el('button','btn navy','فتح محادثة واتساب ويب');open.type='button';
+ open.onclick=()=>{const c=crmContacts.find(x=>x.id===contact.value);if(!c){message.textContent='اختر عميلًا أولًا.';return}
+ const phone=marketingWebPhone(c.phone);if(!phone){message.textContent='رقم العميل غير صالح لرابط واتساب دولي. راجع الرقم في CRM.';return}
+ const txt=draft.value.trim();if(!txt){message.textContent='اكتب نص الرسالة أولًا.';return}
+ const url='https://web.whatsapp.com/send?phone='+encodeURIComponent(phone)+'&text='+encodeURIComponent(txt);
+ const tab=window.open(url,'_blank','noopener,noreferrer');message.textContent='تم طلب فتح واتساب ويب. راجع المحادثة وأرسل الرسالة يدويًا؛ لم يتم تسجيلها كمرسلة.';};
+ const copy=el('button','ghost','نسخ الرسالة');copy.type='button';copy.onclick=async()=>{try{await navigator.clipboard.writeText(draft.value);message.textContent='تم نسخ نص الرسالة.'}catch{draft.focus();draft.select();message.textContent='حدد النص وانسخه يدويًا.'}};
+ const task=el('button','ghost','إنشاء مهمة متابعة لهذا العميل');task.type='button';
+ task.onclick=()=>{const c=crmContacts.find(x=>x.id===contact.value);if(!c){message.textContent='اختر عميلًا أولًا.';return}
+ const form=ensureFollowupsSection().querySelector('#followupForm');renderFollowups();
+ form.reset();form.elements.id.value='';form.elements.title.value='متابعة تواصل واتساب: '+(c.full_name||'عميل');
+ form.elements.contact_id.value=c.id;form.elements.property_id.value=property.value||'';
+ form.elements.channel.value='واتساب';form.elements.status.value='جديدة';
+ const when=new Date(Date.now()+86400000);form.elements.due_at.value=followupLocal(when.toISOString());
+ form.elements.notes.value='تجهيز رسالة واتساب للعميل. يُرجى تأكيد الإرسال الفعلي يدويًا وتوثيق النتيجة.';
+ form.querySelector('button[type=submit]').textContent='حفظ المتابعة';
+ form.scrollIntoView({behavior:'smooth',block:'start'});message.textContent='تم تجهيز مهمة المتابعة. اضغط حفظ المتابعة لتسجيلها في Supabase.'};
+ actions.append(open,copy,task);root.append(actions);
 }
