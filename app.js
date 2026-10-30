@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['التقارير والإحصائيات','manahelReportsSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -719,4 +719,42 @@ function renderStage9Reports(){
  const stats=[['العقارات',m.p.length],['العقارات المنشورة',m.p.filter(x=>x.is_published).length],['العملاء',m.c.length],['الطلبات',m.r.length],['الصفقات',m.d.length],['الصفقات النشطة',m.d.filter(x=>!['مكتملة','ملغاة'].includes(x.stage)).length],['الصفقات المكتملة',m.d.filter(x=>x.stage==='مكتملة').length],['السعي الإجمالي',stage9Money(m.total)],['المحصل',stage9Money(m.collected)],['المتبقي',stage9Money(m.remaining)]];
  for(const [label,value] of stats){const card=el('div','stage9-stat');card.append(el('span','',label),el('strong','',String(value)));cards.append(card)}
  stage9BarChart(charts,'العقارات حسب النوع',m.propertyTypes);stage9BarChart(charts,'الطلبات حسب الحالة',m.requestStatuses);stage9BarChart(charts,'الصفقات حسب المرحلة',m.dealStages);
+}
+
+// Stage 10: manual, read-only export of admin-accessible public business tables.
+// No database credentials or authentication secrets are exported.
+const stage10Tables=['properties','property_images','property_requests','crm_contacts','crm_links','request_property_matches','real_estate_deals'];
+function renderStage10Backup(){
+ if(!authorized||!db)return;
+ let root=$('manahelBackupSection');if(root)return;
+ root=el('section','form-card stage10-backup');root.id='manahelBackupSection';
+ root.append(el('h3','','النسخ الاحتياطي وحماية البيانات'),el('p','','تنزيل نسخة JSON من بيانات الأعمال التي يستطيع المدير قراءتها. لا تشمل هذه النسخة كلمات المرور أو مستخدمي المصادقة أو ملفات الصور المخزنة في Storage. احتفظ بالنسخة في مكان آمن، ولا ترفعها إلى GitHub العام.'));
+ const button=el('button','','تنزيل نسخة احتياطية يدوية (JSON)');button.type='button';
+ const feedback=el('p','stage10-feedback','');
+ const help=el('p','','النسخ التلقائي يعمل بصورة مستقلة عبر GitHub Actions في مستودع خاص، بعد إعداد بيانات الاتصال الآمنة. تنزيل JSON لا يعني أن استعادة البيانات مفعلة تلقائيًا.');
+ button.onclick=async()=>{
+  if(!authorized||!session){feedback.textContent='يرجى تسجيل دخول المدير.';return}
+  button.disabled=true;let total=0;
+  const payload={format:'manahel-public-business-backup',version:1,created_at:new Date().toISOString(),tables:{},counts:{}};
+  try{
+   for(const table of stage10Tables){
+    let rows=[],offset=0;
+    while(true){
+     const {data,error}=await db.from(table).select('*').range(offset,offset+499);
+     if(error)throw new Error('تعذر قراءة جدول '+table+': '+error.message);
+     const page=data||[];rows.push(...page);offset+=page.length;
+     feedback.textContent='جارٍ نسخ '+table+' — '+rows.length+' سجل';
+     if(page.length<500)break;
+     if(offset>500000)throw new Error('تم إيقاف التصدير بسبب تجاوز الحد الآمن للسجلات.');
+    }
+    payload.tables[table]=rows;payload.counts[table]=rows.length;total+=rows.length;
+   }
+   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
+   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='manahel-manual-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+   feedback.textContent='تم تجهيز نسخة '+total+' سجل. تأكد من ظهور الملف في التنزيلات واحفظه في مكان خاص.';
+  }catch(err){feedback.textContent='لم تكتمل النسخة، ولم يتم تنزيل ملف جزئي: '+err.message}
+  finally{button.disabled=false}
+ };
+ root.append(button,feedback,help);
+ const target=$('manahelReportsSection')||$('manahelDealsSection')||$('manahelAdminContent');target?.insertAdjacentElement('afterend',root);
 }
