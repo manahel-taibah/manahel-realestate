@@ -391,3 +391,17 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 
 /* Stage 14: warnings about unverified request criteria */
 .match-warning{display:block;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px;margin-top:6px;line-height:1.7}
+
+/* Stage 15: itemized commission receipts */
+.deal-collections{border:1px solid #d7e1ed;border-radius:12px;padding:12px;margin-top:12px;background:#f8fafc}
+.deal-collections>summary{cursor:pointer;font-weight:700;color:#15345a}
+.deal-collections-body{padding-top:12px}
+.deal-collections-note{color:#795400;font-size:.92rem;line-height:1.8}
+.deal-payment-row{padding:10px 0;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.deal-payment-row small{width:100%;color:#52627a}
+.deal-collection-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.deal-collection-form label{display:flex;flex-direction:column;gap:6px;font-weight:600}
+.deal-collection-form input,.deal-collection-form select{width:100%;min-width:0;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:10px;background:white;font:inherit}
+.deal-collection-form button{align-self:end;min-height:42px}
+.deal-collection-feedback{grid-column:1/-1;color:#92400e}
+@media(max-width:700px){.deal-collection-form{grid-template-columns:1fr}}
