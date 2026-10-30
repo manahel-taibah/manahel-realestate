@@ -298,3 +298,13 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 
 /* Stage 6: admin request editor */
 .request-manager{margin:20px 0;padding:20px}.request-manager-form{display:grid;gap:14px}.request-manager-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.request-manager-form label{display:flex;flex-direction:column;gap:6px}.request-manager-form input,.request-manager-form select,.request-manager-form textarea{width:100%;box-sizing:border-box;min-height:42px;padding:10px;border:1px solid #d5dce6;border-radius:9px;background:#fff;color:#15243a}.request-manager-form textarea{min-height:75px}.request-manager .crm-actions{display:flex;gap:10px;flex-wrap:wrap}
+
+/* Stage 7: request/property matching */
+.request-matching{margin-top:14px;padding:12px;border:1px solid #dce2eb;border-radius:12px;background:#f9fafc}
+.request-matching summary{cursor:pointer;font-weight:700;color:#0b2444}
+.request-matching p{font-size:.9rem;color:#526071}
+.match-results,.match-saved{display:grid;gap:10px;margin-top:12px}
+.match-card{display:grid;gap:6px;padding:12px;background:white;border:1px solid #e4e8ef;border-radius:10px}
+.match-card small{color:#526071}
+.match-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.match-actions a,.match-actions button,.match-saved button{font:inherit;font-size:.86rem;padding:7px 11px;border-radius:7px;border:1px solid #ccd6e4;background:white;color:#0b2444;cursor:pointer;text-decoration:none}

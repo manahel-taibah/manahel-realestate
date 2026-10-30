@@ -5,6 +5,7 @@ const db=configured?createClient(cfg.supabaseUrl,cfg.supabaseAnonKey):null;
 const $=id=>document.getElementById(id);
 const sample=[{id:'demo1',title:'أرض سكنية في الرذايا',property_type:'أرض',city:'المدينة المنورة',district:'الرذايا',price:10000000,area:65691,description:'على طريق المدينة القصيم القديم — عرض توضيحي، يرجى التأكد من التوفر.',image_url:null,is_published:true},{id:'demo2',title:'دور في حي الرانوناء',property_type:'دور',city:'المدينة المنورة',district:'الرانوناء',price:1400000,area:418,description:'سبع غرف وتأسيس مصعد — عرض توضيحي، يرجى التأكد من التوفر.',image_url:null,is_published:true},{id:'demo3',title:'فيلا وثلاث شقق مستقلة',property_type:'فيلا',city:'المدينة المنورة',district:'الدفاع',price:2300000,area:524.44,description:'فيلا مع شقق مستقلة — عرض توضيحي، يرجى التأكد من التوفر.',image_url:null,is_published:true}];
 let listings=[],requests=[],session=null,authorized=false;
+let requestMatches=[];
 let imageRows=[],galleryItems=[],galleryIndex=0;
 const detailFields=['bedrooms','living_rooms','bathrooms','floors','street_width','property_age','facing','furnishing','features'];
 const detailNumbers=['bedrooms','living_rooms','bathrooms','floors','street_width','property_age'];
@@ -66,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -168,10 +169,71 @@ function renderRequestItems(){
    });
    updateSaveState();
   item.append(notesLabel,memo,save,feedback);
+  item.append(renderRequestMatches(x));
   if(x.updated_at){const d=new Date(x.updated_at);if(!Number.isNaN(d.getTime()))item.append(el('small','',`آخر تحديث: ${d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'})}`))}
   rr.append(item);
  }
  if(!shown.length)rr.append(el('p','','لا توجد طلبات مطابقة للبحث.'));
+}
+
+// Stage 7: matching uses only authorized admin data; no public customer information.
+function matchProperty(request,property){
+ const type=String(request.property_type||'').trim(),city=String(request.city||'').trim();
+ const ptype=String(property.property_type||'').trim(),pcity=String(property.city||'').trim();
+ // Incompatible property type or city is not a candidate.
+ if(type&&ptype!==type)return null;
+ if(city&&pcity!==city)return null;
+ const budget=Number(request.budget),price=Number(property.price);
+ if(request.budget!=null&&request.budget!==''&&property.price!=null&&price>budget)return null;
+ const min=request.min_area==null||request.min_area===''?null:Number(request.min_area);
+ const max=request.max_area==null||request.max_area===''?null:Number(request.max_area);
+ const area=property.area==null?null:Number(property.area);
+ if(area!==null&&((min!==null&&area<min)||(max!==null&&area>max)))return null;
+ let score=45,checks=[];
+ if(type){score+=15;checks.push('النوع مطابق')}
+ if(city){score+=15;checks.push('المدينة مطابقة')}
+ const district=String(request.district||'').trim();
+ if(district&&String(property.district||'').trim()===district){score+=15;checks.push('الحي مطابق')}
+ else if(district)checks.push('الحي مختلف أو غير محدد');
+ if(request.budget!=null&&property.price!=null){score+=5;checks.push('ضمن الميزانية')}
+ if((min!==null||max!==null)&&area!==null){score+=5;checks.push('المساحة مناسبة')}
+ return {property,score:Math.min(100,score),checks};
+}
+async function loadRequestMatches(){
+ if(!authorized||!db)return;
+ const {data,error}=await db.from('request_property_matches').select('id,request_id,property_id,notes,created_at');
+ if(error){console.warn('Stage 7 matching records unavailable:',error);requestMatches=[];}
+ else requestMatches=data||[];
+ renderRequestItems();
+}
+function renderRequestMatches(request){
+ const box=el('details','request-matching');
+ const saved=requestMatches.filter(m=>m.request_id===request.id);
+ const heading=el('summary','',`مطابقة العقارات المناسبة (${saved.length} محفوظة)`);box.append(heading);
+ const help=el('p','', 'النتائج تقديرية بناءً على النوع والمدينة والحي والميزانية والمساحة؛ راجع تفاصيل العقار قبل الإرسال.');box.append(help);
+ const candidates=listings.filter(p=>p.is_published===true).map(p=>matchProperty(request,p)).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,20);
+ if(!candidates.length)box.append(el('p','','لا توجد عقارات منشورة مطابقة للشروط الأساسية حاليًا.'));
+ const rows=el('div','match-results');
+ for(const m of candidates){
+  const card=el('div','match-card');const p=m.property;
+  card.append(el('strong','',p.title||'عقار بدون عنوان'),el('small','',`${m.score}% توافق مبدئي · ${p.district||p.city||''} · ${format(p.price)} · ${p.area||'—'} م²`),el('small','',m.checks.join(' · ')));
+  const actions=el('div','match-actions');
+  const view=el('a','','عرض العقار');view.href=propertyLink(p.id);view.target='_blank';view.rel='noopener';actions.append(view);
+  const digits=crmPhone(request.phone);
+  if(digits.length>=9&&digits.length<=15){const wa=el('a','','إرسال عبر واتساب');wa.href=`https://wa.me/${digits}?text=${encodeURIComponent('مرحبًا، هذا عرض عقاري قد يناسب طلبكم:\n'+p.title+'\n'+propertyLink(p.id))}`;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
+  const record=saved.find(x=>x.property_id===p.id),button=el('button','ghost',record?'إزالة من المحفوظات':'حفظ المطابقة');button.type='button';
+  button.onclick=async()=>{
+   if(!authorized)return;button.disabled=true;
+   const result=record?await db.from('request_property_matches').delete().eq('id',record.id):await db.from('request_property_matches').insert({request_id:request.id,property_id:p.id});
+   if(result.error){alert('تعذر حفظ المطابقة. تأكد من تنفيذ stage7_database.sql: '+result.error.message);button.disabled=false;return}
+   await loadRequestMatches();
+  };actions.append(button);card.append(actions);rows.append(card);
+ }
+ box.append(rows);
+ const missing=saved.filter(m=>!candidates.some(c=>c.property.id===m.property_id));
+ if(missing.length){const old=el('div','match-saved');old.append(el('strong','', 'مطابقات محفوظة خارج النتائج الحالية'));
+ for(const record of missing){const p=listings.find(x=>x.id===record.property_id);const line=el('div','match-card');line.append(el('span','',p?.title||'عقار غير متاح'),el('small','','قد يكون العقار مخفيًا أو تغيرت شروط الطلب'));const remove=el('button','ghost','إزالة');remove.type='button';remove.onclick=async()=>{const {error}=await db.from('request_property_matches').delete().eq('id',record.id);if(error)alert(error.message);else await loadRequestMatches()};line.append(remove);old.append(line)}box.append(old)}
+ return box;
 }
 
 // CRM: isolated admin-only module; does not change public listing or request flows.
