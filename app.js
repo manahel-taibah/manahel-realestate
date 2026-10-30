@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -549,3 +549,111 @@ async function renderPropertyRoute(){
 window.addEventListener('popstate',()=>{renderPropertyRoute();window.scrollTo(0,0)});
 
 loadPublic();
+
+// Stage 8: private deal pipeline, commission tracking and collections.
+let dealRows=[];
+const dealStages=['عرض العقار','معاينة','تفاوض','اتفاق مبدئي','إفراغ','مكتملة','ملغاة'];
+const dealMoney=n=>new Intl.NumberFormat('ar-SA',{maximumFractionDigits:2}).format(Number(n)||0)+' ريال';
+function dealField(label,name,type='text',value=''){
+ const wrap=el('label','');wrap.append(el('span','',label));
+ const input=el(type==='select'?'select':'input','');
+ input.name=name;
+ if(type!=='select')input.type=type;
+ if(value!==undefined&&type!=='select')input.value=value;
+ wrap.append(input);return [wrap,input];
+}
+function dealOptions(select,rows,placeholder){
+ select.append(new Option(placeholder,''));
+ for(const [id,label] of rows)select.append(new Option(label,String(id)));
+}
+async function loadDeals(){
+ if(!authorized||!db)return;
+ const root=ensureDealsSection();
+ const {data,error}=await db.from('real_estate_deals').select('*').order('created_at',{ascending:false});
+ const msg=root.querySelector('.deals-feedback');
+ if(error){msg.textContent='تعذر تحميل الصفقات: '+error.message+' — نفّذ ملف stage8_database.sql أولًا.';return}
+ msg.textContent='';dealRows=data||[];renderDeals();
+}
+function ensureDealsSection(){
+ let root=$('manahelDealsSection');if(root)return root;
+ root=el('section','form-card deals-section');root.id='manahelDealsSection';
+ root.append(el('h3','','إدارة الصفقات والعمولات'),el('p','','ربط العقار بالعميل والطلب، متابعة مراحل الصفقة والسعي والمبالغ المحصلة. النسبة قابلة للتعديل حسب الاتفاق.'));
+ const form=el('form','deals-form');form.id='manahelDealForm';
+ const grid=el('div','deals-grid');
+ const fields={};
+ function field(label,name,type='text',value=''){const [wrap,input]=dealField(label,name,type,value);grid.append(wrap);fields[name]=input;return input}
+ field('رقم الصفقة (للتعديل فقط)','id','hidden');
+ field('العقار','property_id','select');
+ field('العميل','contact_id','select');
+ field('الطلب المرتبط (اختياري)','request_id','select');
+ field('مرحلة الصفقة','stage','select');
+ field('سعر العرض (ريال)','asking_price','number');
+ field('السعر المتفق عليه (ريال)','agreed_price','number');
+ field('نسبة السعي %','commission_rate','number','2.5');
+ field('قيمة السعي المتفق عليها (ريال) — اختيارية','commission_override','number');
+ field('المبلغ المحصل (ريال)','collected_amount','number','0');
+ field('موعد المتابعة','next_follow_up','date');
+ field('ملاحظات المتابعة','notes');
+ fields.property_id.required=true;
+ fields.stage.required=true;
+ fields.agreed_price.min='0';fields.asking_price.min='0';
+ fields.commission_rate.min='0';fields.commission_rate.step='0.01';
+ fields.collected_amount.min='0';fields.collected_amount.step='0.01';
+ fields.commission_override.min='0';fields.commission_override.step='0.01';
+ fields.agreed_price.step='0.01';fields.asking_price.step='0.01';
+ dealOptions(fields.stage,dealStages.map(x=>[x,x]),'اختر المرحلة');
+ fields.stage.value='عرض العقار';
+ const actions=el('div','deals-actions'),save=el('button','','حفظ الصفقة'),reset=el('button','ghost','إلغاء التعديل');
+ save.type='submit';reset.type='button';reset.onclick=()=>{form.reset();fields.id.value='';fields.stage.value='عرض العقار';fields.commission_rate.value='2.5';save.textContent='حفظ الصفقة'};
+ actions.append(save,reset);form.append(grid,actions);
+ const preview=el('p','deals-preview');
+ function updatePreview(){const base=Number(fields.agreed_price.value)||0;const rate=Number(fields.commission_rate.value)||0;const override=fields.commission_override.value.trim();const commission=override!==''?Number(override):base*rate/100;const collected=Number(fields.collected_amount.value)||0;preview.textContent='السعي المتوقع: '+dealMoney(commission)+' | المحصل: '+dealMoney(collected)+' | المتبقي: '+dealMoney(Math.max(0,commission-collected))}
+ form.addEventListener('input',updatePreview);updatePreview();form.append(preview);
+ const feedback=el('p','deals-feedback');const summary=el('div','deals-summary'),list=el('div','deals-list');
+ root.append(form,feedback,summary,list);
+ const target=$('crmContactsSection')||$('adminRequests')||$('adminPanel');target.insertAdjacentElement('afterend',root);
+ form.addEventListener('submit',async event=>{
+  event.preventDefault();if(!authorized)return;
+  const f=new FormData(form),id=String(f.get('id')||'');
+  const num=(key)=>{const v=String(f.get(key)||'').trim();return v===''?null:Number(v)};
+  const payload={property_id:f.get('property_id'),contact_id:f.get('contact_id')||null,request_id:f.get('request_id')||null,stage:f.get('stage'),asking_price:num('asking_price'),agreed_price:num('agreed_price'),commission_rate:num('commission_rate')??0,commission_override:num('commission_override'),collected_amount:num('collected_amount')??0,next_follow_up:f.get('next_follow_up')||null,notes:String(f.get('notes')||'').trim()||null};
+  if(!payload.property_id){feedback.textContent='اختر العقار أولًا';return}
+  if(payload.commission_override!==null&&payload.collected_amount>payload.commission_override){feedback.textContent='المبلغ المحصل أكبر من قيمة السعي المحددة';return}
+  save.disabled=true;feedback.textContent='جارٍ الحفظ...';
+  const {error}=id?await db.from('real_estate_deals').update(payload).eq('id',id):await db.from('real_estate_deals').insert(payload);
+  save.disabled=false;
+  if(error){feedback.textContent='تعذر الحفظ: '+error.message;return}
+  reset.click();feedback.textContent='تم حفظ الصفقة بنجاح';await loadDeals();
+ });
+ root._dealFields=fields;root._dealPreview=updatePreview;return root;
+}
+function renderDeals(){
+ const root=ensureDealsSection(),fields=root._dealFields,form=$('manahelDealForm');
+ const selected={property:fields.property_id.value,contact:fields.contact_id.value,request:fields.request_id.value};
+ for(const key of ['property_id','contact_id','request_id'])fields[key].replaceChildren();
+ dealOptions(fields.property_id,listings.map(x=>[x.id,x.title||'عقار بدون عنوان']),'اختر العقار');
+ dealOptions(fields.contact_id,crmContacts.map(x=>[x.id,x.name||x.full_name||x.phone||'عميل']),'بدون ربط عميل');
+ dealOptions(fields.request_id,requests.map(x=>[x.id,(x.full_name||'طلب')+' — '+(x.property_type||'')]),'بدون ربط طلب');
+ fields.property_id.value=selected.property;fields.contact_id.value=selected.contact;fields.request_id.value=selected.request;
+ const summary=root.querySelector('.deals-summary'),list=root.querySelector('.deals-list');summary.replaceChildren();list.replaceChildren();
+ const active=dealRows.filter(x=>!['مكتملة','ملغاة'].includes(x.stage)).length;
+ const completed=dealRows.filter(x=>x.stage==='مكتملة').length;
+ const collected=dealRows.reduce((sum,x)=>sum+(Number(x.collected_amount)||0),0);
+ summary.append(el('strong','',`إجمالي الصفقات: ${dealRows.length}`),el('strong','',`النشطة: ${active}`),el('strong','',`المكتملة: ${completed}`),el('strong','',`المحصل: ${dealMoney(collected)}`));
+ for(const x of dealRows){
+  const property=listings.find(p=>p.id===x.property_id),contact=crmContacts.find(c=>c.id===x.contact_id);
+  const base=Number(x.agreed_price)||0,commission=x.commission_override==null?base*(Number(x.commission_rate)||0)/100:Number(x.commission_override),paid=Number(x.collected_amount)||0;
+  const card=el('article','deal-card');
+  card.append(el('strong','',property?.title||'عقار غير متاح'),el('small','',`المرحلة: ${x.stage} | العميل: ${contact?.name||contact?.full_name||'غير محدد'}`),el('p','',`السعر المتفق عليه: ${dealMoney(base)} | السعي: ${dealMoney(commission)} | المحصل: ${dealMoney(paid)} | المتبقي: ${dealMoney(Math.max(0,commission-paid))}`));
+  if(x.next_follow_up)card.append(el('small','',`المتابعة القادمة: ${x.next_follow_up}`));
+  if(x.notes)card.append(el('p','',x.notes));
+  const actions=el('div','deals-actions'),edit=el('button','ghost','تعديل'),del=el('button','ghost','حذف');
+  edit.type='button';del.type='button';
+  edit.onclick=()=>{for(const [key,input] of Object.entries(fields))input.value=x[key]??'';fields.id.value=x.id;form.querySelector('button[type=submit]').textContent='تحديث الصفقة';root._dealPreview();root.scrollIntoView({behavior:'smooth',block:'start'})};
+  del.onclick=async()=>{if(!confirm('هل تريد حذف الصفقة نهائيًا؟'))return;const {error}=await db.from('real_estate_deals').delete().eq('id',x.id);if(error)alert(error.message);else await loadDeals()};
+  actions.append(edit,del);
+  const phone=crmPhone(contact?.phone||'');if(phone.length>=9&&phone.length<=15){const wa=el('a','deal-whatsapp','واتساب العميل');wa.href='https://wa.me/'+phone;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
+  card.append(actions);list.append(card);
+ }
+ if(!dealRows.length)list.append(el('p','','لا توجد صفقات بعد. أضف أول صفقة من النموذج أعلاه.'));
+}
