@@ -205,26 +205,36 @@ function renderRequestItems(){
 
 // Stage 7: matching uses only authorized admin data; no public customer information.
 function matchProperty(request,property){
- const type=String(request.property_type||'').trim(),city=String(request.city||'').trim();
- const ptype=String(property.property_type||'').trim(),pcity=String(property.city||'').trim();
- // Incompatible property type or city is not a candidate.
- if(type&&ptype!==type)return null;
- if(city&&pcity!==city)return null;
- const budget=Number(request.budget),price=Number(property.price);
- if(request.budget!=null&&request.budget!==''&&property.price!=null&&price>budget)return null;
+ // Stage 14: transparent, conservative matching. Missing data never counts as a match.
+ const norm=v=>String(v??'').trim().replace(/\\s+/g,' ').toLocaleLowerCase('ar');
+ const checks=[],warnings=[];let matched=0,compared=0;
+ function exact(label,wanted,actual,mandatory=false){
+  if(!norm(wanted))return true;
+  if(!norm(actual)){warnings.push(label+' غير محدد في العرض');return !mandatory}
+  compared++;if(norm(wanted)===norm(actual)){matched++;checks.push(label+' مطابق');return true}
+  if(mandatory)return false;
+  warnings.push(label+' مختلف');return true;
+ }
+ if(!exact('نوع العقار',request.property_type,property.property_type,true))return null;
+ if(!exact('المدينة',request.city,property.city,true))return null;
+ if(!exact('الحي',request.district,property.district))return null;
+ const budget=request.budget==null||request.budget===''?null:Number(request.budget);
+ const price=property.price==null||property.price===''?null:Number(property.price);
+ if(budget!==null&&Number.isFinite(budget)){
+  if(price===null||!Number.isFinite(price))warnings.push('السعر غير محدد في العرض');
+  else {compared++;if(price>budget)return null;matched++;checks.push('ضمن الميزانية')}
+ }
  const min=request.min_area==null||request.min_area===''?null:Number(request.min_area);
  const max=request.max_area==null||request.max_area===''?null:Number(request.max_area);
- const area=property.area==null?null:Number(property.area);
- if(area!==null&&((min!==null&&area<min)||(max!==null&&area>max)))return null;
- let score=45,checks=[];
- if(type){score+=15;checks.push('النوع مطابق')}
- if(city){score+=15;checks.push('المدينة مطابقة')}
- const district=String(request.district||'').trim();
- if(district&&String(property.district||'').trim()===district){score+=15;checks.push('الحي مطابق')}
- else if(district)checks.push('الحي مختلف أو غير محدد');
- if(request.budget!=null&&property.price!=null){score+=5;checks.push('ضمن الميزانية')}
- if((min!==null||max!==null)&&area!==null){score+=5;checks.push('المساحة مناسبة')}
- return {property,score:Math.min(100,score),checks};
+ const area=property.area==null||property.area===''?null:Number(property.area);
+ if(min!==null||max!==null){
+  if(area===null||!Number.isFinite(area))warnings.push('المساحة غير محددة في العرض');
+  else{compared++;if((min!==null&&area<min)||(max!==null&&area>max))return null;matched++;checks.push('المساحة مناسبة')}
+ }
+ // Free-text notes are not machine-verifiable requirements.
+ if(norm(request.notes))warnings.push('تفاصيل الطلب النصية تحتاج مراجعة يدوية');
+ const score=compared?Math.round(100*matched/compared):0;
+ return {property,score,checks,warnings,compared};
 }
 async function loadRequestMatches(){
  if(!authorized||!db)return;
@@ -236,14 +246,14 @@ async function loadRequestMatches(){
 function renderRequestMatches(request){
  const box=el('details','request-matching');
  const saved=requestMatches.filter(m=>m.request_id===request.id);
- const heading=el('summary','',`مطابقة العقارات المناسبة (${saved.length} محفوظة)`);box.append(heading);
- const help=el('p','', 'النتائج تقديرية بناءً على النوع والمدينة والحي والميزانية والمساحة؛ راجع تفاصيل العقار قبل الإرسال.');box.append(help);
+ const heading=el('summary','',`المطابقة الذكية للطلب (${saved.length} محفوظة)`);box.append(heading);
+ const help=el('p','', 'النتائج مبدئية: يتم استبعاد اختلاف النوع أو المدينة أو تجاوز الميزانية والمساحة المحددة. البيانات الناقصة والتفاصيل النصية تحتاج مراجعة يدوية؛ النسبة لا تشمل الشروط غير القابلة للتحقق.');box.append(help);
  const candidates=listings.filter(p=>p.is_published===true).map(p=>matchProperty(request,p)).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,20);
  if(!candidates.length)box.append(el('p','','لا توجد عقارات منشورة مطابقة للشروط الأساسية حاليًا.'));
  const rows=el('div','match-results');
  for(const m of candidates){
   const card=el('div','match-card');const p=m.property;
-  card.append(el('strong','',p.title||'عقار بدون عنوان'),el('small','',`${m.score}% توافق مبدئي · ${p.district||p.city||''} · ${format(p.price)} · ${p.area||'—'} م²`),el('small','',m.checks.join(' · ')));
+  card.append(el('strong','',p.title||'عقار بدون عنوان'),el('small','',`${m.score}% من الشروط القابلة للتحقق (${m.compared}) · ${p.district||p.city||''} · ${format(p.price)} · ${p.area||'—'} م²`),el('small','',m.checks.join(' · ')||'لا توجد شروط قابلة للتحقق'));if(m.warnings.length)card.append(el('small','match-warning','⚠ '+m.warnings.join(' · ')));
   const actions=el('div','match-actions');
   const view=el('a','','عرض العقار');view.href=propertyLink(p.id);view.target='_blank';view.rel='noopener';actions.append(view);
   const digits=crmPhone(request.phone);
