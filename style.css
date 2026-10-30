@@ -388,3 +388,6 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 .marketing-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
 .marketing-actions button{min-height:44px}
 @media(max-width:700px){.marketing-fields{grid-template-columns:1fr}.marketing-actions button{width:100%}}
+
+/* Stage 14: warnings about unverified request criteria */
+.match-warning{display:block;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px;margin-top:6px;line-height:1.7}
