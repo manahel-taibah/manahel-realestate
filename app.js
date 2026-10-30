@@ -589,6 +589,13 @@ loadPublic();
 
 // Stage 8: private deal pipeline, commission tracking and collections.
 let dealRows=[];
+let dealCollections=[];
+let dealCollectionsReady=false;
+const dealCommission=x=>x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;
+const dealOpeningPaid=x=>Number(x.collected_amount)||0;
+const dealNewPaid=x=>dealCollections.filter(p=>p.deal_id===x.id).reduce((sum,p)=>sum+(Number(p.amount)||0),0);
+const dealPaid=x=>dealOpeningPaid(x)+(dealCollectionsReady?dealNewPaid(x):0);
+const dealRemaining=x=>Math.max(0,dealCommission(x)-dealPaid(x));
 const dealStages=['عرض العقار','معاينة','تفاوض','اتفاق مبدئي','إفراغ','مكتملة','ملغاة'];
 const dealMoney=n=>new Intl.NumberFormat('ar-SA',{maximumFractionDigits:2}).format(Number(n)||0)+' ريال';
 function dealField(label,name,type='text',value=''){
@@ -609,7 +616,14 @@ async function loadDeals(){
  const {data,error}=await db.from('real_estate_deals').select('*').order('created_at',{ascending:false});
  const msg=root.querySelector('.deals-feedback');
  if(error){msg.textContent='تعذر تحميل الصفقات: '+error.message+' — نفّذ ملف stage8_database.sql أولًا.';return}
- msg.textContent='';dealRows=data||[];renderDeals();renderStage9Reports();renderDashboard();
+ dealRows=data||[];
+ // Failure to load collections must not prevent admin login or hide existing deals.
+ try{
+  const ledger=await db.from('deal_collections').select('*').order('paid_on',{ascending:false});
+  if(ledger.error)throw ledger.error;
+  dealCollections=ledger.data||[];dealCollectionsReady=true;msg.textContent='';
+ }catch(e){dealCollections=[];dealCollectionsReady=false;msg.textContent='تنبيه: تعذر تحميل دفعات التحصيل. عُطّل تسجيل الدفعات وإجمالي التحصيل الجديد مؤقتًا: '+(e?.message||'خطأ غير معروف');}
+ renderDeals();renderStage9Reports();renderDashboard();
 }
 function ensureDealsSection(){
  let root=$('manahelDealsSection');if(root)return root;
@@ -628,7 +642,7 @@ function ensureDealsSection(){
  field('السعر المتفق عليه (ريال)','agreed_price','number');
  field('نسبة السعي %','commission_rate','number','2.5');
  field('قيمة السعي المتفق عليها (ريال) — اختيارية','commission_override','number');
- field('المبلغ المحصل (ريال)','collected_amount','number','0');
+ field('رصيد التحصيل السابق قبل المرحلة 15 (ريال)','collected_amount','number','0');
  field('موعد المتابعة','next_follow_up','date');
  field('ملاحظات المتابعة','notes');
  fields.property_id.required=true;
@@ -644,7 +658,7 @@ function ensureDealsSection(){
  save.type='submit';reset.type='button';reset.onclick=()=>{form.reset();fields.id.value='';fields.stage.value='عرض العقار';fields.commission_rate.value='2.5';save.textContent='حفظ الصفقة'};
  actions.append(save,reset);form.append(grid,actions);
  const preview=el('p','deals-preview');
- function updatePreview(){const base=Number(fields.agreed_price.value)||0;const rate=Number(fields.commission_rate.value)||0;const override=fields.commission_override.value.trim();const commission=override!==''?Number(override):base*rate/100;const collected=Number(fields.collected_amount.value)||0;preview.textContent='السعي المتوقع: '+dealMoney(commission)+' | المحصل: '+dealMoney(collected)+' | المتبقي: '+dealMoney(Math.max(0,commission-collected))}
+ function updatePreview(){const base=Number(fields.agreed_price.value)||0;const rate=Number(fields.commission_rate.value)||0;const override=fields.commission_override.value.trim();const commission=override!==''?Number(override):base*rate/100;const opening=Number(fields.collected_amount.value)||0;const ledger=dealCollectionsReady&&fields.id.value?dealCollections.filter(p=>p.deal_id===fields.id.value).reduce((n,p)=>n+Number(p.amount),0):0;preview.textContent='السعي المتوقع: '+dealMoney(commission)+' | التحصيل السابق: '+dealMoney(opening)+(dealCollectionsReady?' | الدفعات الجديدة: '+dealMoney(ledger)+' | إجمالي المحصل: '+dealMoney(opening+ledger)+' | المتبقي: '+dealMoney(Math.max(0,commission-opening-ledger)):' | تعذر التحقق من الدفعات الجديدة')}
  form.addEventListener('input',updatePreview);updatePreview();form.append(preview);
  const feedback=el('p','deals-feedback');const summary=el('div','deals-summary'),list=el('div','deals-list');
  root.append(form,feedback,summary,list);
@@ -655,7 +669,11 @@ function ensureDealsSection(){
   const num=(key)=>{const v=String(f.get(key)||'').trim();return v===''?null:Number(v)};
   const payload={property_id:f.get('property_id'),contact_id:f.get('contact_id')||null,request_id:f.get('request_id')||null,stage:f.get('stage'),asking_price:num('asking_price'),agreed_price:num('agreed_price'),commission_rate:num('commission_rate')??0,commission_override:num('commission_override'),collected_amount:num('collected_amount')??0,next_follow_up:f.get('next_follow_up')||null,notes:String(f.get('notes')||'').trim()||null};
   if(!payload.property_id){feedback.textContent='اختر العقار أولًا';return}
-  if(payload.commission_override!==null&&payload.collected_amount>payload.commission_override){feedback.textContent='المبلغ المحصل أكبر من قيمة السعي المحددة';return}
+  if(!dealCollectionsReady){feedback.textContent='تعذر التحقق من سجل الدفعات؛ أعد تحميل الصفحة أو راجع صلاحيات الجدول قبل حفظ الصفقة.';return}
+  const existing=dealRows.find(x=>x.id===id);
+  if(existing&&dealNewPaid(existing)>0&&Math.abs(payload.collected_amount-dealOpeningPaid(existing))>0.005){feedback.textContent='لا يمكن تعديل رصيد التحصيل السابق بعد إضافة دفعات جديدة. راجع سجل الدفعات.';return}
+  const fee=dealCommission(payload),ledger=existing?dealNewPaid(existing):0;
+  if(payload.collected_amount+ledger>fee+0.005){feedback.textContent='مجموع التحصيل السابق والدفعات يتجاوز قيمة العمولة.';return}
   save.disabled=true;feedback.textContent='جارٍ الحفظ...';
   const {error}=id?await db.from('real_estate_deals').update(payload).eq('id',id):await db.from('real_estate_deals').insert(payload);
   save.disabled=false;
@@ -675,13 +693,13 @@ function renderDeals(){
  const summary=root.querySelector('.deals-summary'),list=root.querySelector('.deals-list');summary.replaceChildren();list.replaceChildren();
  const active=dealRows.filter(x=>!['مكتملة','ملغاة'].includes(x.stage)).length;
  const completed=dealRows.filter(x=>x.stage==='مكتملة').length;
- const collected=dealRows.reduce((sum,x)=>sum+(Number(x.collected_amount)||0),0);
- summary.append(el('strong','',`إجمالي الصفقات: ${dealRows.length}`),el('strong','',`النشطة: ${active}`),el('strong','',`المكتملة: ${completed}`),el('strong','',`المحصل: ${dealMoney(collected)}`));
+ const collected=dealRows.reduce((sum,x)=>sum+dealPaid(x),0);
+ summary.append(el('strong','',`إجمالي الصفقات: ${dealRows.length}`),el('strong','',`النشطة: ${active}`),el('strong','',`المكتملة: ${completed}`),el('strong','',dealCollectionsReady?`المحصل: ${dealMoney(collected)}`:'إجمالي التحصيل غير متاح مؤقتًا'));
  for(const x of dealRows){
   const property=listings.find(p=>p.id===x.property_id),contact=crmContacts.find(c=>c.id===x.contact_id);
-  const base=Number(x.agreed_price)||0,commission=x.commission_override==null?base*(Number(x.commission_rate)||0)/100:Number(x.commission_override),paid=Number(x.collected_amount)||0;
+  const base=Number(x.agreed_price)||0,commission=dealCommission(x),paid=dealPaid(x);
   const card=el('article','deal-card');
-  card.append(el('strong','',property?.title||'عقار غير متاح'),el('small','',`المرحلة: ${x.stage} | العميل: ${contact?.name||contact?.full_name||'غير محدد'}`),el('p','',`السعر المتفق عليه: ${dealMoney(base)} | السعي: ${dealMoney(commission)} | المحصل: ${dealMoney(paid)} | المتبقي: ${dealMoney(Math.max(0,commission-paid))}`));
+  card.append(el('strong','',property?.title||'عقار غير متاح'),el('small','',`المرحلة: ${x.stage} | العميل: ${contact?.name||contact?.full_name||'غير محدد'}`),el('p','',`السعر المتفق عليه: ${dealMoney(base)} | السعي: ${dealMoney(commission)} | ${dealCollectionsReady?'المحصل: '+dealMoney(paid)+' | المتبقي: '+dealMoney(Math.max(0,commission-paid)):'التحصيل والمتبقي: غير متاحين حتى تحميل الدفعات'}`));
   if(x.next_follow_up)card.append(el('small','',`المتابعة القادمة: ${x.next_follow_up}`));
   if(x.notes)card.append(el('p','',x.notes));
   const actions=el('div','deals-actions'),edit=el('button','ghost','تعديل'),del=el('button','ghost','حذف');
@@ -690,9 +708,60 @@ function renderDeals(){
   del.onclick=async()=>{if(!confirm('هل تريد حذف الصفقة نهائيًا؟'))return;const {error}=await db.from('real_estate_deals').delete().eq('id',x.id);if(error)alert(error.message);else await loadDeals()};
   actions.append(edit,del);
   const phone=crmPhone(contact?.phone||'');if(phone.length>=9&&phone.length<=15){const wa=el('a','deal-whatsapp','واتساب العميل');wa.href='https://wa.me/'+phone;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
-  card.append(actions);list.append(card);
+  card.append(actions);if(dealCollectionsReady)card.append(dealCollectionPanel(x));list.append(card);
  }
  if(!dealRows.length)list.append(el('p','','لا توجد صفقات بعد. أضف أول صفقة من النموذج أعلاه.'));
+}
+
+
+// Stage 15 — separate ledger for new receipts. Previous collected_amount is opening balance.
+function dealCollectionPanel(deal){
+ const section=el('details','deal-collections');
+ const payments=dealCollections.filter(p=>p.deal_id===deal.id);
+ section.append(el('summary','',`سجل دفعات التحصيل (${payments.length})`));
+ const body=el('div','deal-collections-body');
+ body.append(el('p','deal-collections-note','رصيد التحصيل السابق: '+dealMoney(dealOpeningPaid(deal))+' — لا تسجّله مرة أخرى كدفعة.'));
+ for(const payment of payments){
+  const item=el('div','deal-payment-row');
+  item.append(el('span','',`${dealMoney(payment.amount)} | ${payment.paid_on} | ${payment.payment_method||'—'}${payment.reference_number?' | مرجع: '+payment.reference_number:''}`));
+  if(payment.notes)item.append(el('small','',payment.notes));
+  const remove=el('button','ghost','حذف الدفعة');remove.type='button';
+  remove.onclick=async()=>{
+   if(!authorized||!confirm('هل تريد حذف هذه الدفعة نهائيًا؟'))return;
+   remove.disabled=true;
+   const {error}=await db.from('deal_collections').delete().eq('id',payment.id);
+   if(error){alert('تعذر حذف الدفعة: '+error.message);remove.disabled=false;return}
+   await loadDeals();
+  };
+  item.append(remove);body.append(item);
+ }
+ if(!payments.length)body.append(el('p','','لم تسجّل دفعات جديدة لهذه الصفقة.'));
+ const form=el('form','deal-collection-form');
+ function field(label,name,type='text'){
+  const wrap=el('label','',label),input=el('input');input.type=type;input.name=name;wrap.append(input);form.append(wrap);return input;
+ }
+ const amount=field('مبلغ الدفعة (ريال)','amount','number');amount.required=true;amount.min='0.01';amount.step='0.01';
+ const paidOn=field('تاريخ التحصيل','paid_on','date');paidOn.required=true;paidOn.value=new Date().toISOString().slice(0,10);
+ const methodWrap=el('label','','طريقة السداد'),method=el('select');
+ for(const value of ['تحويل بنكي','نقدًا','شبكة','شيك','أخرى'])method.append(new Option(value,value));
+ methodWrap.append(method);form.append(methodWrap);
+ const reference=field('رقم المرجع (اختياري)','reference_number');reference.maxLength=120;
+ const notes=field('ملاحظات (اختياري)','notes');notes.maxLength=2000;
+ const submit=el('button','','تسجيل الدفعة');submit.type='submit';
+ const status=el('p','deal-collection-feedback');status.setAttribute('role','status');form.append(submit,status);
+ form.addEventListener('submit',async event=>{
+  event.preventDefault();if(!authorized||!dealCollectionsReady)return;
+  const value=Number(amount.value);
+  if(!Number.isFinite(value)||value<=0){status.textContent='أدخل مبلغًا أكبر من الصفر.';return}
+  if(value>dealRemaining(deal)+0.005){status.textContent='المبلغ أكبر من العمولة المتبقية: '+dealMoney(dealRemaining(deal));return}
+  if(!paidOn.value){status.textContent='اختر تاريخ التحصيل.';return}
+  submit.disabled=true;status.textContent='جارٍ حفظ الدفعة...';
+  const payload={deal_id:deal.id,amount:value,paid_on:paidOn.value,payment_method:method.value,reference_number:reference.value.trim()||null,notes:notes.value.trim()||null};
+  const {error}=await db.from('deal_collections').insert(payload);
+  if(error){status.textContent='تعذر حفظ الدفعة: '+error.message;submit.disabled=false;return}
+  await loadDeals();
+ });
+ body.append(form);section.append(body);return section;
 }
 
 
@@ -709,9 +778,9 @@ function stage9Metrics(){
  const root=$('manahelReportsSection'),start=root?.querySelector('[name=stage9Start]')?.value||'',end=root?.querySelector('[name=stage9End]')?.value||'';
  const p=listings.filter(x=>stage9Within(x,start,end)),r=requests.filter(x=>stage9Within(x,start,end)),c=crmContacts.filter(x=>stage9Within(x,start,end)),d=dealRows.filter(x=>stage9Within(x,start,end));
  const commission=x=>x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;
- const total=d.reduce((n,x)=>n+commission(x),0),collected=d.reduce((n,x)=>n+(Number(x.collected_amount)||0),0);
+ const total=d.reduce((n,x)=>n+commission(x),0),collected=dealCollectionsReady?d.reduce((n,x)=>n+dealPaid(x),0):null;
  const group=(rows,field,fallback)=>Object.entries(rows.reduce((acc,x)=>{const key=String(x[field]||fallback);acc[key]=(acc[key]||0)+1;return acc},{})).sort((a,b)=>b[1]-a[1]);
- return {start,end,p,r,c,d,total,collected,remaining:Math.max(0,total-collected),propertyTypes:group(p,'property_type','غير محدد'),requestStatuses:group(r,'status','جديد'),dealStages:group(d,'stage','غير محدد')};
+ return {start,end,p,r,c,d,total,collected,remaining:collected===null?null:Math.max(0,total-collected),propertyTypes:group(p,'property_type','غير محدد'),requestStatuses:group(r,'status','جديد'),dealStages:group(d,'stage','غير محدد')};
 }
 function stage9BarChart(parent,title,items){
  const section=el('section','stage9-chart'),h=el('h4','',title);section.append(h);
@@ -725,7 +794,7 @@ function stage9ExportRows(m){
  for(const x of m.p)rows.push(['العقارات',x.title||'',x.property_type||'',x.created_at||'']);
  for(const x of m.r)rows.push(['الطلبات',x.full_name||'',x.status||'جديد',x.created_at||'']);
  for(const x of m.c)rows.push(['العملاء',x.full_name||'',x.role||'',x.created_at||'']);
- for(const x of m.d){const name=m.p.find(p=>p.id===x.property_id)?.title||listings.find(p=>p.id===x.property_id)?.title||'عقار غير متاح';const fee=x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;rows.push(['الصفقات',name+' | '+x.stage,'السعي: '+fee+' | المحصل: '+(Number(x.collected_amount)||0),x.created_at||''])}
+ for(const x of m.d){const name=m.p.find(p=>p.id===x.property_id)?.title||listings.find(p=>p.id===x.property_id)?.title||'عقار غير متاح';const fee=x.commission_override!=null?Number(x.commission_override)||0:(Number(x.agreed_price)||0)*(Number(x.commission_rate)||0)/100;rows.push(['الصفقات',name+' | '+x.stage,'السعي: '+fee+' | المحصل: '+(dealCollectionsReady?dealPaid(x):'غير متاح'),x.created_at||''])}
  return rows;
 }
 function stage9ExportCsv(){
@@ -734,7 +803,7 @@ function stage9ExportCsv(){
 }
 function stage9Print(){
  const m=stage9Metrics(),win=window.open('','_blank');if(!win){alert('اسمح بفتح النافذة المنبثقة لطباعة التقرير.');return}
- const fields=[['العقارات',m.p.length],['العملاء الجدد ضمن الفترة',m.c.length],['الطلبات',m.r.length],['الصفقات',m.d.length],['إجمالي السعي',stage9Money(m.total)],['المحصل',stage9Money(m.collected)],['المتبقي',stage9Money(m.remaining)]];
+ const fields=[['العقارات',m.p.length],['العملاء الجدد ضمن الفترة',m.c.length],['الطلبات',m.r.length],['الصفقات',m.d.length],['إجمالي السعي',stage9Money(m.total)],['المحصل',m.collected===null?'غير متاح':stage9Money(m.collected)],['المتبقي',m.remaining===null?'غير متاح':stage9Money(m.remaining)]];
  const rowHtml=fields.map(([label,value])=>'<tr><th>'+stage9Esc(label)+'</th><td>'+stage9Esc(value)+'</td></tr>').join('');
  const dist=(title,items)=>'<h2>'+stage9Esc(title)+'</h2><table><tbody>'+items.map(([label,n])=>'<tr><th>'+stage9Esc(label)+'</th><td>'+stage9Esc(n)+'</td></tr>').join('')+'</tbody></table>';
  const html='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير مناهل طيبة</title><style>body{font-family:Tahoma,Arial,sans-serif;color:#152743;padding:32px}h1{font-size:22px}h2{font-size:17px;margin-top:28px}table{border-collapse:collapse;width:100%;margin-top:14px}th,td{padding:11px;border:1px solid #cbd5e1;text-align:right}th{background:#f2f5f9;width:55%}p{color:#52627b}@media print{body{padding:0}}</style></head><body><h1>مؤسسة مناهل طيبة — التقرير العقاري</h1><p>الفترة: '+stage9Esc(m.start||'البداية')+' إلى '+stage9Esc(m.end||'اليوم / دون حد')+'</p><p>التصفية بتاريخ إنشاء السجلات؛ مبالغ السعي والتحصيل هي القيم الحالية للصفقات التي أُنشئت ضمن الفترة.</p><table><tbody>'+rowHtml+'</tbody></table>'+dist('أنواع العقارات',m.propertyTypes)+dist('حالات الطلبات',m.requestStatuses)+dist('مراحل الصفقات',m.dealStages)+'<p>للحفظ بصيغة PDF اختر «حفظ كملف PDF» من نافذة الطباعة.</p></body></html>';
@@ -753,7 +822,7 @@ function renderStage9Reports(){
   const target=$('manahelDealsSection')||$('crmContactsSection')||$('manahelAdminContent');target?.insertAdjacentElement('afterend',root);
  }
  const m=stage9Metrics(),cards=$('stage9Cards'),charts=$('stage9Charts');if(!cards||!charts)return;cards.replaceChildren();charts.replaceChildren();
- const stats=[['العقارات',m.p.length],['العقارات المنشورة',m.p.filter(x=>x.is_published).length],['العملاء',m.c.length],['الطلبات',m.r.length],['الصفقات',m.d.length],['الصفقات النشطة',m.d.filter(x=>!['مكتملة','ملغاة'].includes(x.stage)).length],['الصفقات المكتملة',m.d.filter(x=>x.stage==='مكتملة').length],['السعي الإجمالي',stage9Money(m.total)],['المحصل',stage9Money(m.collected)],['المتبقي',stage9Money(m.remaining)]];
+ const stats=[['العقارات',m.p.length],['العقارات المنشورة',m.p.filter(x=>x.is_published).length],['العملاء',m.c.length],['الطلبات',m.r.length],['الصفقات',m.d.length],['الصفقات النشطة',m.d.filter(x=>!['مكتملة','ملغاة'].includes(x.stage)).length],['الصفقات المكتملة',m.d.filter(x=>x.stage==='مكتملة').length],['السعي الإجمالي',stage9Money(m.total)],['المحصل',m.collected===null?'غير متاح':stage9Money(m.collected)],['المتبقي',m.remaining===null?'غير متاح':stage9Money(m.remaining)]];
  for(const [label,value] of stats){const card=el('div','stage9-stat');card.append(el('span','',label),el('strong','',String(value)));cards.append(card)}
  stage9BarChart(charts,'العقارات حسب النوع',m.propertyTypes);stage9BarChart(charts,'الطلبات حسب الحالة',m.requestStatuses);stage9BarChart(charts,'الصفقات حسب المرحلة',m.dealStages);
 }
