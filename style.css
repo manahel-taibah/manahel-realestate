@@ -419,3 +419,14 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 .deal-collection-form button{align-self:end;min-height:42px}
 .deal-collection-feedback{grid-column:1/-1;color:#92400e}
 @media(max-width:700px){.deal-collection-form{grid-template-columns:1fr}}
+
+/* Stage 16 — private documents workspace */
+.docs-section{margin-block:24px;scroll-margin-top:24px;direction:rtl}
+.docs-notice{color:#52627a;line-height:1.8}
+.docs-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.docs-form label{display:flex;flex-direction:column;gap:6px;font-weight:600}
+.docs-form input,.docs-form select,.docs-form textarea,.docs-filter{box-sizing:border-box;width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font:inherit}
+.docs-form textarea{min-height:76px}.docs-status{grid-column:1/-1;color:#92400e}
+.docs-list{display:grid;gap:12px;margin-top:12px}.docs-item{border:1px solid #dbe4ee;border-radius:10px;padding:14px;display:grid;gap:8px}
+.docs-item small{color:#52627a}.docs-actions{display:flex;gap:8px;flex-wrap:wrap}
+.docs-error{color:#b91c1c}@media(max-width:700px){.docs-form{grid-template-columns:1fr}}
