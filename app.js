@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const marketing=$('manahelMarketingSection');if(marketing)marketing.replaceChildren();const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();renderMarketing();}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -1003,4 +1003,79 @@ function renderMarketing(){
  form.querySelector('button[type=submit]').textContent='حفظ المتابعة';
  form.scrollIntoView({behavior:'smooth',block:'start'});message.textContent='تم تجهيز مهمة المتابعة. اضغط حفظ المتابعة لتسجيلها في Supabase.'};
  actions.append(open,copy,task);root.append(actions);
+}
+
+
+// Stage 16: private documents. Uploads never enter the public GitHub repository.
+const docBucket='crm-private-documents';
+const docTypes=['عقد وساطة','صك','عقد بيع','مستند صفقة','هوية','أخرى'];
+let docRows=[];
+function docElement(tag,cls,txt){const x=document.createElement(tag);if(cls)x.className=cls;if(txt!=null)x.textContent=txt;return x}
+function docOption(value,text){const o=document.createElement('option');o.value=value;o.textContent=text;return o}
+function docSection(){
+ let root=$('manahelDocumentsSection');if(root)return root;
+ root=docElement('section','form-card docs-section');root.id='manahelDocumentsSection';
+ root.append(docElement('h3','','المستندات والعقود العقارية'),docElement('p','docs-notice','ملفات خاصة محفوظة في Supabase Storage، لا تُنشر في GitHub. استخدم مستندًا تجريبيًا غير حساس أولًا.'));
+ const form=docElement('form','docs-form');form.id='docUploadForm';
+ const field=(label,name,tag='input')=>{const wrap=docElement('label','',label),input=docElement(tag);input.name=name;wrap.append(input);form.append(wrap);return input};
+ const title=field('عنوان المستند','title');title.required=true;title.maxLength=180;
+ const type=field('نوع المستند','document_type','select');docTypes.forEach(v=>type.append(docOption(v,v)));
+ const relation=field('يرتبط بـ','related_type','select');['عام','عقار','عميل','صفقة'].forEach(v=>relation.append(docOption(v,v)));
+ const target=field('اختر السجل المرتبط','related_id','select');
+ const file=field('الملف (PDF أو صورة، حتى 10 MB)','file');file.type='file';file.accept='.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp';file.required=true;
+ const notes=field('ملاحظات (اختياري)','notes','textarea');notes.maxLength=2000;
+ const submit=docElement('button','','رفع المستند');submit.type='submit';form.append(submit);
+ const status=docElement('p','docs-status');status.setAttribute('role','status');form.append(status);
+ const filter=docElement('input','docs-filter');filter.type='search';filter.placeholder='البحث في عنوان المستند أو نوعه';
+ const list=docElement('div','docs-list');list.id='docList';
+ root.append(form,filter,list);
+ const updateTargets=()=>{target.replaceChildren();if(relation.value==='عام'){target.disabled=true;target.required=false;target.append(docOption('','لا يوجد'));return}target.disabled=false;target.required=true;target.append(docOption('','اختر السجل'));
+  const rows=relation.value==='عقار'?listings.map(x=>[x.id,x.title]):relation.value==='عميل'?crmContacts.map(x=>[x.id,x.full_name+' — '+x.phone]):dealRows.map(x=>[x.id,'صفقة '+x.id.slice(0,8)+' — '+(listings.find(p=>p.id===x.property_id)?.title||'عقار')]);
+  for(const [id,label] of rows)target.append(docOption(id,label||id));};
+ relation.addEventListener('change',updateTargets);updateTargets();
+ filter.addEventListener('input',()=>renderDocList(filter.value));
+ form.addEventListener('submit',async e=>{
+  e.preventDefault();if(!authorized||!session?.user?.id)return;
+  const f=file.files?.[0];if(!f){status.textContent='اختر ملفًا.';return}
+  const allowed=['application/pdf','image/jpeg','image/png','image/webp'];
+  const ext=(f.name.split('.').pop()||'').toLowerCase();const extensions={pdf:'application/pdf',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp'};
+  if(!extensions[ext]||!allowed.includes(f.type)||extensions[ext]!==f.type){status.textContent='نوع الملف غير مدعوم أو لا يطابق امتداده.';return}
+  if(f.size<=0||f.size>10485760){status.textContent='يجب ألا يتجاوز الملف 10 ميجابايت.';return}
+  if(relation.value!=='عام'&&!target.value){status.textContent='اختر السجل المرتبط.';return}
+  submit.disabled=true;status.textContent='جارٍ رفع الملف...';
+  const uuid=crypto.randomUUID();const path=session.user.id+'/'+uuid+'.'+ext;
+  try{
+   const up=await db.storage.from(docBucket).upload(path,f,{contentType:f.type,upsert:false});if(up.error)throw up.error;
+   const payload={title:title.value.trim(),document_type:type.value,related_type:relation.value,related_id:relation.value==='عام'?null:target.value,storage_path:path,original_filename:f.name,mime_type:f.type,file_size:f.size,notes:notes.value.trim()||null};
+   const saved=await db.from('crm_documents').insert(payload);
+   if(saved.error){await db.storage.from(docBucket).remove([path]);throw saved.error}
+   status.textContent='تم رفع المستند وحفظ بياناته.';form.reset();updateTargets();await loadDocuments();
+  }catch(err){status.textContent='تعذر رفع المستند: '+(err.message||String(err))}finally{submit.disabled=false}
+ });
+ const content=$('manahelAdminContent')||$('adminPanel');content.append(root);return root;
+}
+async function loadDocuments(){
+ if(!authorized||!db)return;
+ const root=docSection();const list=root.querySelector('#docList');
+ const {data,error}=await db.from('crm_documents').select('*').order('created_at',{ascending:false}).limit(300);
+ if(error){list.replaceChildren(docElement('p','docs-error','تعذر تحميل المستندات: '+error.message));return}
+ docRows=data||[];renderDocList(root.querySelector('.docs-filter').value);
+}
+function renderDocList(search=''){
+ const root=$('manahelDocumentsSection');if(!root)return;
+ const list=root.querySelector('#docList');list.replaceChildren();
+ const rows=docRows.filter(d=>(d.title+' '+d.document_type+' '+d.original_filename).toLowerCase().includes(search.trim().toLowerCase()));
+ if(!rows.length){list.append(docElement('p','','لا توجد مستندات مطابقة.'));return}
+ for(const d of rows){
+  const item=docElement('div','docs-item');item.append(docElement('strong','',d.title),docElement('small','',d.document_type+' | '+d.related_type+' | '+d.original_filename+' | '+new Date(d.created_at).toLocaleDateString('ar-SA')));
+  if(d.notes)item.append(docElement('p','',d.notes));
+  const actions=docElement('div','docs-actions');
+  const open=docElement('button','ghost','فتح الملف');open.type='button';
+  open.onclick=async()=>{open.disabled=true;try{const {data,error}=await db.storage.from(docBucket).createSignedUrl(d.storage_path,60);if(error)throw error;window.open(data.signedUrl,'_blank','noopener,noreferrer')}catch(e){alert('تعذر فتح الملف: '+e.message)}finally{open.disabled=false}};
+  const del=docElement('button','ghost','حذف المستند');del.type='button';
+  del.onclick=async()=>{if(!confirm('حذف المستند نهائيًا؟ لا يمكن التراجع.'))return;del.disabled=true;
+   const removed=await db.storage.from(docBucket).remove([d.storage_path]);if(removed.error){alert('تعذر حذف الملف: '+removed.error.message);del.disabled=false;return}
+   const meta=await db.from('crm_documents').delete().eq('id',d.id);if(meta.error){alert('حُذف الملف لكن تعذر حذف سجله؛ يرجى مراجعة الإدارة: '+meta.error.message);del.disabled=false;return}await loadDocuments()};
+  actions.append(open,del);item.append(actions);list.append(item);
+ }
 }
