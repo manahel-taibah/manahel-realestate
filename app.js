@@ -154,6 +154,25 @@ function renderRequestItems(){
   for(const val of ['جديد','قيد المتابعة','مكتمل','ملغى']){const op=el('option','',val);op.value=val;status.append(op)}status.value=x.status||'جديد';
   status.onchange=async()=>{status.disabled=true;const stamp=new Date().toISOString();const {error}=await db.from('property_requests').update({status:status.value,updated_at:stamp}).eq('id',x.id);status.disabled=false;if(error){alert('تعذر تحديث الحالة: تحقق من صلاحيات التعديل');status.value=x.status||'جديد'}else{x.status=status.value;x.updated_at=stamp;renderDashboard();setupAdminNavigation();renderRequestItems()}};
   actions.append(status);
+  const editRequest=el('button','ghost','تعديل الطلب');
+  editRequest.type='button';
+  editRequest.setAttribute('aria-label','تعديل طلب '+x.full_name);
+  editRequest.onclick=()=>{
+   if(!authorized)return;
+   ensureRequestManager();
+   const form=$('adminRequestForm');
+   if(!form){alert('تعذر فتح نموذج تعديل الطلب');return}
+   const fields=['id','full_name','phone','property_type','city','district','budget','min_area','max_area','request_details','notes'];
+   for(const key of fields)form.elements[key].value=x[key]??'';
+   const linked=crmLinks.find(link=>link.request_id===x.id);
+   const contactSelect=form.elements.contact_id;
+   contactSelect.value=linked?.contact_id||'';
+   if(contactSelect.value!==(linked?.contact_id||''))contactSelect.value='';
+   form.querySelector('[type=submit]').textContent='تحديث الطلب';
+   form.scrollIntoView({behavior:'smooth',block:'start'});
+   form.elements.full_name.focus({preventScroll:true});
+  };
+  actions.append(editRequest);
   const phone=String(x.phone||'').replace(/[^\d]/g,'');const normalized=phone.startsWith('0')?'966'+phone.slice(1):phone;
   if(normalized.length>=9&&normalized.length<=15){const wa=el('a','request-whatsapp','واتساب العميل');wa.href='https://wa.me/'+encodeURIComponent(normalized);wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
   item.append(actions);
