@@ -162,7 +162,7 @@ function renderRequestItems(){
    ensureRequestManager();
    const form=$('adminRequestForm');
    if(!form){alert('تعذر فتح نموذج تعديل الطلب');return}
-   const fields=['id','full_name','phone','property_type','city','district','budget','min_area','max_area','request_details','notes'];
+   const fields=['id','full_name','phone','property_type','city','district','budget','min_area','max_area','min_total_rooms','request_details','notes'];
    for(const key of fields)form.elements[key].value=x[key]??'';
    const linked=crmLinks.find(link=>link.request_id===x.id);
    const contactSelect=form.elements.contact_id;
@@ -251,7 +251,16 @@ function matchProperty(request,property){
   else{compared++;if((min!==null&&area<min)||(max!==null&&area>max))return null;matched++;checks.push('المساحة مناسبة')}
  }
  // Free-text notes are not machine-verifiable requirements.
- if(norm(request.notes))warnings.push('تفاصيل الطلب النصية تحتاج مراجعة يدوية');
+ // Total rooms include bedrooms, living rooms and majlis, but exclude halls.
+  // The listing currently records bedrooms only, so fewer bedrooms cannot prove a mismatch.
+  const requestedRooms=request.min_total_rooms==null||request.min_total_rooms===''?null:Number(request.min_total_rooms);
+  if(requestedRooms!==null&&Number.isFinite(requestedRooms)&&requestedRooms>0){
+   const bedrooms=property.bedrooms==null||property.bedrooms===''?null:Number(property.bedrooms);
+   if(bedrooms!==null&&Number.isFinite(bedrooms)&&bedrooms>=requestedRooms){
+    compared++;matched++;checks.push('إجمالي الغرف مستوفى (غرف النوم وحدها تكفي)');
+   }else warnings.push('إجمالي الغرف يحتاج تحققًا: العرض لا يسجل غرف المعيشة والمجالس بشكل مستقل');
+  }
+  if(norm(request.request_details)||norm(request.notes))warnings.push('المواصفات النصية تحتاج مراجعة يدوية');
  const score=compared?Math.round(100*matched/compared):0;
  return {property,score,checks,warnings,compared};
 }
@@ -266,7 +275,7 @@ function renderRequestMatches(request){
  const box=el('details','request-matching');
  const saved=requestMatches.filter(m=>m.request_id===request.id);
  const heading=el('summary','',`المطابقة الذكية للطلب (${saved.length} محفوظة)`);box.append(heading);
- const help=el('p','', 'النتائج مبدئية: يتم استبعاد اختلاف النوع أو المدينة أو تجاوز الميزانية والمساحة المحددة. البيانات الناقصة والتفاصيل النصية تحتاج مراجعة يدوية؛ النسبة لا تشمل الشروط غير القابلة للتحقق.');box.append(help);
+ const help=el('p','', 'النتائج مبدئية: يتم استبعاد اختلاف النوع أو المدينة أو تجاوز الميزانية والمساحة المحددة. البيانات الناقصة والتفاصيل النصية تحتاج مراجعة يدوية؛ إجمالي الغرف يشمل غرف النوم والمعيشة والمجالس دون الصالات. النسبة تخص الشروط التي أمكن التحقق منها فقط، وليست نسبة تطابق نهائية.');box.append(help);
  const candidates=listings.filter(p=>p.is_published===true).map(p=>matchProperty(request,p)).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,20);
  if(!candidates.length)box.append(el('p','','لا توجد عقارات منشورة مطابقة للشروط الأساسية حاليًا.'));
  const rows=el('div','match-results');
@@ -461,7 +470,7 @@ function ensureRequestManager(){
  const contactLabel=el('label','','ربط بعميل مسجل'),contact=el('select');contact.name='contact_id';contact.id='requestContactSelect';contactLabel.append(contact);fields.append(contactLabel);
  field('اسم العميل *','full_name','text',true);field('رقم الجوال *','phone','tel',true);
  const typeLabel=el('label','','نوع العقار'),type=el('select');type.name='property_type';type.required=true;for(const v of ['','أرض','شقة','دور','فيلا','عمارة','مزرعة','مستودع','محل تجاري','أخرى'])type.append(crmOption(v,v||'اختر النوع'));typeLabel.append(type);fields.append(typeLabel);
- field('المدينة *','city','text',true);field('الحي','district');field('الميزانية القصوى (ريال)','budget','number');field('المساحة من (م²)','min_area','number');field('المساحة إلى (م²)','max_area','number');
+ field('المدينة *','city','text',true);field('الحي','district');field('الميزانية القصوى (ريال)','budget','number');field('المساحة من (م²)','min_area','number');field('المساحة إلى (م²)','max_area','number');field('الحد الأدنى لإجمالي الغرف (بدون الصالات)','min_total_rooms','number');
  const detailsLabel=el('label','','المواصفات المطلوبة'),details=el('textarea');details.name='request_details';details.rows=3;detailsLabel.append(details);
  const notesLabel=el('label','','ملاحظات العميل'),notes=el('textarea');notes.name='notes';notes.rows=2;notesLabel.append(notes);
  const actions=el('div','crm-actions'),submit=el('button','btn navy','حفظ الطلب');submit.type='submit';const reset=el('button','ghost','طلب جديد');reset.type='button';reset.onclick=()=>{form.reset();form.elements.id.value='';submit.textContent='حفظ الطلب'};actions.append(submit,reset);
@@ -471,7 +480,7 @@ function ensureRequestManager(){
   e.preventDefault();if(!authorized||!db)return;
   const f=e.currentTarget,id=f.elements.id.value,contactId=f.elements.contact_id.value;
   const val=k=>String(f.elements[k].value||'').trim();
-  const payload={full_name:val('full_name'),phone:val('phone'),property_type:val('property_type')||null,city:val('city')||null,district:val('district')||null,budget:val('budget')?Number(val('budget')):null,min_area:val('min_area')?Number(val('min_area')):null,max_area:val('max_area')?Number(val('max_area')):null,request_details:val('request_details')||null,notes:val('notes')||null,updated_at:new Date().toISOString()};
+  const payload={full_name:val('full_name'),phone:val('phone'),property_type:val('property_type')||null,city:val('city')||null,district:val('district')||null,budget:val('budget')?Number(val('budget')):null,min_area:val('min_area')?Number(val('min_area')):null,max_area:val('max_area')?Number(val('max_area')):null,min_total_rooms:val('min_total_rooms')?Number(val('min_total_rooms')):null,request_details:val('request_details')||null,notes:val('notes')||null,updated_at:new Date().toISOString()};
   if(!payload.full_name||!payload.property_type||!payload.city||!/^[+\d\s-]{8,20}$/.test(payload.phone)){alert('يرجى إدخال اسم العميل ورقم جوال صحيح');return}
   if(payload.min_area!=null&&payload.max_area!=null&&payload.min_area>payload.max_area){alert('المساحة الدنيا أكبر من المساحة العليا');return}
   submit.disabled=true;
