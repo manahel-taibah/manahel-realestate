@@ -502,7 +502,67 @@ function ensureRequestManager(){
 }
 function fillRequestContacts(){const select=$('requestContactSelect');if(!select)return;const current=select.value;select.replaceChildren(crmOption('','بدون ربط بعميل'));for(const c of crmContacts)select.append(crmOption(c.id,`${c.full_name} — ${c.phone}`));select.value=current;}
 
-function renderAdmin(){const lp=$('adminListings');lp.replaceChildren();for(const x of listings){const item=el('div','admin-item');item.append(el('strong','',x.title),el('small','',x.city+' · '+format(x.price)+' · '+(x.is_published?'منشور':'مخفي')));const actions=el('div','actions'),edit=el('button','','تعديل'),del=el('button','danger','حذف');edit.onclick=()=>editListing(x);del.onclick=()=>deleteListing(x);actions.append(edit,del);item.append(actions);lp.append(item)}if(!listings.length)lp.append(el('p','','لا توجد عروض بعد.'));const rr=$('adminRequests');
+// Stage 18: administrator-only listing search, filters and sorting.
+function ensureAdminListingTools(){
+ const root=$('adminListings');
+ if(!root||!authorized)return null;
+ let tools=$('stage18ListingTools');
+ if(tools)return tools;
+ tools=el('div','request-tools stage18-listing-tools');tools.id='stage18ListingTools';
+ const search=el('input','stage18-search');search.type='search';search.placeholder='بحث باسم العقار أو المدينة أو الحي';search.setAttribute('aria-label','بحث في جميع العروض');
+ const type=el('select','stage18-type');type.setAttribute('aria-label','نوع العقار');
+ const status=el('select','stage18-status');status.setAttribute('aria-label','حالة النشر');
+ for(const [value,label] of [['','كل الحالات'],['published','المنشورة'],['hidden','المخفية']])status.append(crmOption(value,label));
+ const max=el('input','stage18-max');max.type='number';max.min='0';max.step='any';max.placeholder='أعلى سعر (ريال)';max.setAttribute('aria-label','الحد الأعلى للسعر');
+ const sort=el('select','stage18-sort');sort.setAttribute('aria-label','ترتيب العروض');
+ for(const [value,label] of [['newest','الأحدث أولًا'],['oldest','الأقدم أولًا'],['price_asc','الأقل سعرًا'],['price_desc','الأعلى سعرًا']])sort.append(crmOption(value,label));
+ const count=el('small','stage18-count');count.setAttribute('aria-live','polite');
+ const reset=el('button','ghost','مسح الفلاتر');reset.type='button';reset.onclick=()=>{search.value='';type.value='';status.value='';max.value='';sort.value='newest';renderAdminListings()};
+ tools.append(search,type,status,max,sort,reset,count);root.before(tools);
+ for(const input of [search,type,status,max,sort])input.addEventListener(input.tagName==='SELECT'?'change':'input',renderAdminListings);
+ return tools;
+}
+function renderAdminListings(){
+ const root=$('adminListings');if(!root)return;
+ const tools=ensureAdminListingTools();if(!tools)return;
+ const type=tools.querySelector('.stage18-type'),previous=type.value;
+ type.replaceChildren(crmOption('','جميع الأنواع'));
+ for(const value of [...new Set(listings.map(x=>String(x.property_type||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar')))type.append(crmOption(value,value));
+ type.value=previous;
+ const search=tools.querySelector('.stage18-search').value.trim().toLocaleLowerCase('ar');
+ const selectedType=type.value,status=tools.querySelector('.stage18-status').value,maxRaw=tools.querySelector('.stage18-max').value,sort=tools.querySelector('.stage18-sort').value;
+ const filtered=listings.filter(x=>{
+  if(search&&![x.title,x.city,x.district].some(v=>String(v||'').toLocaleLowerCase('ar').includes(search)))return false;
+  if(selectedType&&x.property_type!==selectedType)return false;
+  if(status==='published'&&x.is_published!==true)return false;
+  if(status==='hidden'&&x.is_published===true)return false;
+  if(maxRaw!==''&&(x.price===null||x.price===undefined||x.price===''||!Number.isFinite(Number(x.price))||Number(x.price)>Number(maxRaw)))return false;
+  return true;
+ }).sort((a,b)=>{
+  if(sort==='price_asc'||sort==='price_desc'){
+   const av=a.price==null?null:Number(a.price),bv=b.price==null?null:Number(b.price);
+   if(av===null)return bv===null?0:1;if(bv===null)return -1;
+   return sort==='price_asc'?av-bv:bv-av;
+  }
+  const av=Date.parse(a.created_at||'')||0,bv=Date.parse(b.created_at||'')||0;
+  return sort==='oldest'?av-bv:bv-av;
+ });
+ tools.querySelector('.stage18-count').textContent=`النتائج: ${filtered.length} من ${listings.length}`;
+ root.replaceChildren();
+ for(const x of filtered){
+  const item=el('div','admin-item');
+  item.append(el('strong','',x.title||'عقار بدون عنوان'),el('small','',`${x.city||'مدينة غير محددة'}${x.district?' · '+x.district:''} · ${x.property_type||'نوع غير محدد'} · ${format(x.price)} · ${x.is_published?'منشور':'مخفي'}`));
+  const actions=el('div','actions');
+  const edit=el('button','','تعديل');edit.type='button';edit.onclick=()=>editListing(x);
+  const del=el('button','danger','حذف');del.type='button';del.onclick=()=>deleteListing(x);
+  actions.append(edit);
+  if(x.is_published){const view=el('a','ghost','عرض العقار');view.href=propertyLink(x.id);view.target='_blank';view.rel='noopener noreferrer';actions.append(view)}
+  else{const label=el('small','','مخفي عن الزوار — استخدم تعديل لمعاينته');actions.append(label)}
+  actions.append(del);item.append(actions);root.append(item);
+ }
+ if(!filtered.length)root.append(el('p','',listings.length?'لا توجد عروض تطابق معايير البحث.':'لا توجد عروض بعد.'));
+}
+function renderAdmin(){renderAdminListings();const rr=$('adminRequests');
   if(!rr.dataset.enhanced){
     rr.dataset.enhanced='1';
     const tools=el('div','request-tools');
