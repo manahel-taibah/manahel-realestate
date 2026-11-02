@@ -59,7 +59,7 @@ async function renderExistingImages(x){
 }
 
 function renderListings(){const city=$('filterCity').value,type=$('filterType').value,max=Number($('filterMax').value),q=$('filterText').value.trim().toLowerCase();const filtered=listings.filter(x=>(!city||x.city===city)&&(!type||x.property_type===type)&&(!$('filterMax').value||(x.price!==null&&Number(x.price)<=max))&&(!q||[x.title,x.district,x.city,x.description].join(' ').toLowerCase().includes(q)));const root=$('listingsGrid');root.replaceChildren();$('listingCount').textContent=filtered.length+' عرض';$('emptyListings').hidden=filtered.length>0;for(const x of filtered){const card=el('article','property-card'),pic=el('div','property-image');if(x.image_url&&validHttp(x.image_url)){const img=el('img');img.src=x.image_url;img.alt=x.title;img.loading='lazy';img.referrerPolicy='no-referrer';pic.append(img)}else pic.append(el('span','placeholder','⌂'));const photos=photosFor(x);if(photos.length){pic.tabIndex=0;pic.setAttribute('role','button');pic.setAttribute('aria-label','عرض صور '+x.title);pic.onclick=()=>openGallery(x);pic.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openGallery(x)}};pic.append(el('span','photo-count',photos.length+' صورة'))}card.append(pic);const body=el('div','property-body');body.append(el('span','tag',x.property_type),el('h3','',x.title),el('p','',x.city+(x.district?' · '+x.district:'')));const meta=el('div','property-meta');if(x.area)meta.append(el('span','',new Intl.NumberFormat('ar-SA').format(x.area)+' م²'));if(x.ad_license)meta.append(el('span','','ترخيص إعلان: '+x.ad_license));body.append(meta,el('div','price',format(x.price)));if(x.description)body.append(el('p','',x.description.slice(0,160)));const detailView=renderPropertyDetails(x);if(detailView)body.append(detailView);const actions=el('div','property-actions');const detailButton=el('button','ghost','عرض التفاصيل');detailButton.type='button';detailButton.onclick=()=>navigateProperty(x.id);actions.append(detailButton);const wa=el('a','', 'استفسر عبر واتساب');wa.href='https://wa.me/'+cfg.whatsapp+'?text='+encodeURIComponent('مرحبًا، أرغب بالاستفسار عن العقار: '+x.title);wa.target='_blank';wa.rel='noopener';actions.append(wa);const shareCard=el('a','','مشاركة العقار');shareCard.href='https://wa.me/?text='+encodeURIComponent(x.title+'\n'+propertyLink(x.id));shareCard.target='_blank';shareCard.rel='noopener';shareCard.setAttribute('aria-label','مشاركة '+x.title+' عبر واتساب');actions.append(shareCard);if(photos.length){const g=el('button','ghost','عرض الصور ('+photos.length+')');g.type='button';g.onclick=()=>openGallery(x);actions.append(g)}if(x.map_url&&validHttp(x.map_url)){const map=el('a','','عرض الموقع');map.href=x.map_url;map.target='_blank';map.rel='noopener';actions.append(map)}body.append(actions);card.append(body);root.append(card)}}
-async function loadPublic(){if(!db){listings=sample;renderListings();return}const {data,error}=await db.from('properties').select('*').eq('is_published',true).order('created_at',{ascending:false});if(error){console.error(error);$('emptyListings').textContent='تعذر تحميل العروض حاليًا.';listings=[]}else listings=data||[];await loadImages();renderListings();renderPropertyRoute()}
+async function loadPublic(){if(!db){listings=sample;renderListings();return}const {data,error}=await db.from('properties').select('*').eq('is_published',true).eq('availability_status','متاح').order('created_at',{ascending:false});if(error){console.error(error);$('emptyListings').textContent='تعذر تحميل العروض حاليًا.';listings=[]}else listings=data||[];await loadImages();renderListings();renderPropertyRoute()}
 ['filterCity','filterType','filterMax','filterText'].forEach(id=>$(id).addEventListener('input',renderListings));
 $('requestForm').addEventListener('submit',async e=>{e.preventDefault();if(!db){setStatus('requestStatus','الموقع في وضع المعاينة. اربط Supabase لتفعيل حفظ الطلبات.',true);return}const f=e.currentTarget,data=Object.fromEntries(new FormData(f));if(!/^\+?\d[\d\s-]{7,17}$/.test(data.phone.trim())){setStatus('requestStatus','يرجى إدخال رقم جوال صحيح.',true);return}const payload={full_name:data.full_name.trim(),phone:data.phone.trim(),property_type:data.property_type,city:data.city,district:data.district||null,budget:data.budget?Number(data.budget):null,notes:data.notes||null};const btn=f.querySelector('[type=submit]');btn.disabled=true;const {error}=await db.from('property_requests').insert(payload);btn.disabled=false;if(error)setStatus('requestStatus','تعذر إرسال الطلب، حاول مرة أخرى لاحقًا.',true);else{f.reset();setStatus('requestStatus','تم استلام طلبك بنجاح. شكرًا لتواصلك.')}});
 function showAdmin(open){$('publicView').hidden=open;$('adminView').hidden=!open;window.scrollTo(0,0);if(open)checkAuth()}
@@ -276,7 +276,7 @@ function renderRequestMatches(request){
  const saved=requestMatches.filter(m=>m.request_id===request.id);
  const heading=el('summary','',`المطابقة الذكية للطلب (${saved.length} محفوظة)`);box.append(heading);
  const help=el('p','', 'النتائج مبدئية: يتم استبعاد اختلاف النوع أو المدينة أو تجاوز الميزانية والمساحة المحددة. البيانات الناقصة والتفاصيل النصية تحتاج مراجعة يدوية؛ إجمالي الغرف يشمل غرف النوم والمعيشة والمجالس دون الصالات. النسبة تخص الشروط التي أمكن التحقق منها فقط، وليست نسبة تطابق نهائية.');box.append(help);
- const candidates=listings.filter(p=>p.is_published===true).map(p=>matchProperty(request,p)).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,20);
+ const candidates=listings.filter(p=>p.is_published===true&&p.availability_status==='متاح').map(p=>matchProperty(request,p)).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,20);
  if(!candidates.length)box.append(el('p','','لا توجد عقارات منشورة مطابقة للشروط الأساسية حاليًا.'));
  const rows=el('div','match-results');
  for(const m of candidates){
@@ -511,17 +511,19 @@ function ensureAdminListingTools(){
  tools=el('div','request-tools stage18-listing-tools');tools.id='stage18ListingTools';
  const search=el('input','stage18-search');search.type='search';search.placeholder='بحث باسم العقار أو المدينة أو الحي';search.setAttribute('aria-label','بحث في جميع العروض');
  const type=el('select','stage18-type');type.setAttribute('aria-label','نوع العقار');
+ const availability=el('select','stage20-availability');availability.setAttribute('aria-label','حالة توفر العقار');for(const v of ['','متاح','محجوز','مباع','مؤجر','غير متاح مؤقتًا'])availability.append(crmOption(v,v||'جميع حالات التوفر'));
  const status=el('select','stage18-status');status.setAttribute('aria-label','حالة النشر');
  for(const [value,label] of [['','كل الحالات'],['published','المنشورة'],['hidden','المخفية']])status.append(crmOption(value,label));
  const max=el('input','stage18-max');max.type='number';max.min='0';max.step='any';max.placeholder='أعلى سعر (ريال)';max.setAttribute('aria-label','الحد الأعلى للسعر');
  const sort=el('select','stage18-sort');sort.setAttribute('aria-label','ترتيب العروض');
  for(const [value,label] of [['newest','الأحدث أولًا'],['oldest','الأقدم أولًا'],['price_asc','الأقل سعرًا'],['price_desc','الأعلى سعرًا']])sort.append(crmOption(value,label));
  const count=el('small','stage18-count');count.setAttribute('aria-live','polite');
- const reset=el('button','ghost','مسح الفلاتر');reset.type='button';reset.onclick=()=>{search.value='';type.value='';status.value='';max.value='';sort.value='newest';renderAdminListings()};
- tools.append(search,type,status,max,sort,reset,count);root.before(tools);
- for(const input of [search,type,status,max,sort])input.addEventListener(input.tagName==='SELECT'?'change':'input',renderAdminListings);
+ const reset=el('button','ghost','مسح الفلاتر');reset.type='button';reset.onclick=()=>{search.value='';type.value='';status.value='';availability.value='';max.value='';sort.value='newest';renderAdminListings()};
+ tools.append(search,type,status,availability,max,sort,reset,count);root.before(tools);
+ for(const input of [search,type,status,availability,max,sort])input.addEventListener(input.tagName==='SELECT'?'change':'input',renderAdminListings);
  return tools;
 }
+function stage20ConfirmationNote(x){if(!x.last_owner_confirmation)return '⚠ لم يُسجّل تأكيد من المالك';const t=Date.parse(x.last_owner_confirmation+'T00:00:00');if(!Number.isFinite(t))return '⚠ تاريخ التأكيد غير صالح';const days=Math.floor((Date.now()-t)/86400000);return days>30?'⚠ مرّ '+days+' يومًا على آخر تأكيد من المالك':null}
 function renderAdminListings(){
  const root=$('adminListings');if(!root)return;
  const tools=ensureAdminListingTools();if(!tools)return;
@@ -532,10 +534,11 @@ function renderAdminListings(){
  for(const value of [...standardTypes,...extraTypes])type.append(crmOption(value,value));
  type.value=previous;
  const search=tools.querySelector('.stage18-search').value.trim().toLocaleLowerCase('ar');
- const selectedType=type.value,status=tools.querySelector('.stage18-status').value,maxRaw=tools.querySelector('.stage18-max').value,sort=tools.querySelector('.stage18-sort').value;
+ const selectedType=type.value,availability=tools.querySelector('.stage20-availability').value,status=tools.querySelector('.stage18-status').value,maxRaw=tools.querySelector('.stage18-max').value,sort=tools.querySelector('.stage18-sort').value;
  const filtered=listings.filter(x=>{
   if(search&&![x.title,x.city,x.district].some(v=>String(v||'').toLocaleLowerCase('ar').includes(search)))return false;
   if(selectedType&&x.property_type!==selectedType)return false;
+  if(availability&&x.availability_status!==availability)return false;
   if(status==='published'&&x.is_published!==true)return false;
   if(status==='hidden'&&x.is_published===true)return false;
   if(maxRaw!==''&&(x.price===null||x.price===undefined||x.price===''||!Number.isFinite(Number(x.price))||Number(x.price)>Number(maxRaw)))return false;
@@ -553,14 +556,14 @@ function renderAdminListings(){
  root.replaceChildren();
  for(const x of filtered){
   const item=el('div','admin-item');
-  item.append(el('strong','',x.title||'عقار بدون عنوان'),el('small','',`${x.city||'مدينة غير محددة'}${x.district?' · '+x.district:''} · ${x.property_type||'نوع غير محدد'} · ${format(x.price)} · ${x.is_published?'منشور':'مخفي'}`));
+  item.append(el('strong','',x.title||'عقار بدون عنوان'),el('small','',`${x.city||'مدينة غير محددة'}${x.district?' · '+x.district:''} · ${x.property_type||'نوع غير محدد'} · ${format(x.price)} · ${x.is_published?'منشور':'مخفي'} · ${x.availability_status||'متاح'}`));
   const actions=el('div','actions');
   const edit=el('button','','تعديل');edit.type='button';edit.onclick=()=>editListing(x);
   const del=el('button','danger','حذف');del.type='button';del.onclick=()=>deleteListing(x);
   actions.append(edit);
-  if(x.is_published){const view=el('a','ghost','عرض العقار');view.href=propertyLink(x.id);view.target='_blank';view.rel='noopener noreferrer';actions.append(view)}
-  else{const label=el('small','','مخفي عن الزوار — استخدم تعديل لمعاينته');actions.append(label)}
-  actions.append(del);item.append(actions);root.append(item);
+  if(x.is_published&&x.availability_status==='متاح'){const view=el('a','ghost','عرض العقار');view.href=propertyLink(x.id);view.target='_blank';view.rel='noopener noreferrer';actions.append(view)}
+  else{const label=el('small','','غير ظاهر للزوار — استخدم تعديل لمراجعته');actions.append(label)}
+  const check=stage20ConfirmationNote(x);if(check)item.append(el('small','',check));actions.append(del);item.append(actions);root.append(item);
  }
  if(!filtered.length)root.append(el('p','',listings.length?'لا توجد عروض تطابق معايير البحث.':'لا توجد عروض بعد.'));
 }
@@ -619,13 +622,13 @@ function stage19CandidateFromForm(form){const raw=Object.fromEntries(new FormDat
 function stage19CheckEditor(){if(!authorized)return;stage19ShowDuplicateWarning(stage19FindDuplicates(stage19CandidateFromForm($('listingForm')),listings))}
 $('listingForm').addEventListener('input',stage19CheckEditor);
 $('listingForm').addEventListener('change',stage19CheckEditor);
-function editListing(x){const f=$('listingForm');for(const key of ['id','title','property_type','city','district','price','area','ad_license','description','map_url','image_url'])f.elements[key].value=x[key]??'';for(const key of detailFields)f.elements[key].value=x[key]??'';f.elements.has_elevator.checked=!!x.has_elevator;f.elements.has_parking.checked=!!x.has_parking;f.elements.is_published.checked=!!x.is_published;$('editorTitle').textContent='تعديل العرض العقاري';$('galleryFiles').value='';$('galleryPreview').replaceChildren();renderExistingImages(x);f.scrollIntoView({behavior:'smooth',block:'start'});stage19CheckEditor()}
+function editListing(x){const f=$('listingForm');for(const key of ['id','title','property_type','city','district','price','area','ad_license','description','map_url','image_url'])f.elements[key].value=x[key]??'';for(const key of detailFields)f.elements[key].value=x[key]??'';f.elements.has_elevator.checked=!!x.has_elevator;f.elements.has_parking.checked=!!x.has_parking;f.elements.is_published.checked=!!x.is_published;f.elements.availability_status.value=x.availability_status||'متاح';f.elements.last_owner_confirmation.value=x.last_owner_confirmation||'';$('editorTitle').textContent='تعديل العرض العقاري';$('galleryFiles').value='';$('galleryPreview').replaceChildren();renderExistingImages(x);f.scrollIntoView({behavior:'smooth',block:'start'});stage19CheckEditor()}
 function clearEditor(){const f=$('listingForm');f.reset();f.elements.id.value='';$('editorTitle').textContent='إضافة عرض عقاري';$('galleryPreview').replaceChildren();$('existingImages').replaceChildren();setStatus('editorStatus','');stage19ShowDuplicateWarning([])}$('clearEditor').onclick=clearEditor;
 async function deleteListing(x){if(!confirm('هل تريد حذف العرض: '+x.title+'؟'))return;const {error}=await db.from('properties').delete().eq('id',x.id);if(error)alert('تعذر حذف العرض');else{await loadAdmin();await loadPublic()}}
 $('listingForm').addEventListener('submit',async e=>{
  e.preventDefault();if(!authorized)return;
  const f=e.currentTarget,raw=Object.fromEntries(new FormData(f)),id=raw.id;
- const payload={title:raw.title.trim(),property_type:raw.property_type,city:raw.city.trim(),district:raw.district||null,price:raw.price?Number(raw.price):null,area:raw.area?Number(raw.area):null,ad_license:raw.ad_license||null,description:raw.description||null,map_url:raw.map_url||null,image_url:raw.image_url||null,is_published:f.elements.is_published.checked};
+ const payload={title:raw.title.trim(),property_type:raw.property_type,city:raw.city.trim(),district:raw.district||null,price:raw.price?Number(raw.price):null,area:raw.area?Number(raw.area):null,ad_license:raw.ad_license||null,description:raw.description||null,map_url:raw.map_url||null,image_url:raw.image_url||null,is_published:f.elements.is_published.checked,availability_status:raw.availability_status,last_owner_confirmation:raw.last_owner_confirmation||null};
  for(const key of detailNumbers)payload[key]=raw[key]===''||raw[key]===undefined?null:Number(raw[key]);for(const key of ['facing','furnishing','features'])payload[key]=raw[key]?.trim()||null;payload.has_elevator=f.elements.has_elevator.checked;payload.has_parking=f.elements.has_parking.checked;
  // Refresh all admin-visible properties before checking, including hidden listings.
  // A failed check never prevents saving; it is advisory only.
@@ -675,7 +678,7 @@ async function renderPropertyRoute(){
  let x=listings.find(p=>String(p.id)===id);
  // A shared link must work without relying on the listings cache or an admin session.
  if(db){
-  const {data,error}=await db.from('properties').select('*').eq('id',id).eq('is_published',true).maybeSingle();
+  const {data,error}=await db.from('properties').select('*').eq('id',id).eq('is_published',true).eq('availability_status','متاح').maybeSingle();
   if(version!==propertyRouteVersion)return;
   if(error){
    console.error('Property detail query failed:',error);
@@ -692,7 +695,7 @@ async function renderPropertyRoute(){
  }
  if(version!==propertyRouteVersion)return;
  notice.remove();
- if(!x){root.append(el('h2','','العقار غير متاح حاليًا'),el('p','','لم نعثر على عرض منشور بهذا الرابط. تحقق من الرابط أو حالة نشر العقار.'));return}
+ if(!x||x.availability_status&&x.availability_status!=='متاح'){root.append(el('h2','','العقار غير متاح حاليًا'),el('p','','لم نعثر على عرض منشور بهذا الرابط. تحقق من الرابط أو حالة نشر العقار.'));return}
  const header=el('div','property-page-heading');header.append(el('span','tag',x.property_type),el('h1','',x.title),el('p','',x.city+(x.district?' · '+x.district:'')),el('div','price',format(x.price)));root.append(header);
  const photos=photosFor(x),visual=el('div','property-page-visual');
  if(photos.length){
