@@ -563,6 +563,7 @@ function renderAdminListings(){
   actions.append(edit);
   if(x.is_published&&x.availability_status==='متاح'){const view=el('a','ghost','عرض العقار');view.href=propertyLink(x.id);view.target='_blank';view.rel='noopener noreferrer';actions.append(view)}
   else{const label=el('small','','غير ظاهر للزوار — استخدم تعديل لمراجعته');actions.append(label)}
+  if(x.last_owner_confirmation){const confirmed=String(x.last_owner_confirmation).slice(0,10);item.append(el('small','',`آخر تأكيد من المالك: ${confirmed}`))}
   const check=stage20ConfirmationNote(x);if(check)item.append(el('small','',check));actions.append(del);item.append(actions);root.append(item);
  }
  if(!filtered.length)root.append(el('p','',listings.length?'لا توجد عروض تطابق معايير البحث.':'لا توجد عروض بعد.'));
