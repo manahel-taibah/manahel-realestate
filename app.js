@@ -527,7 +527,9 @@ function renderAdminListings(){
  const tools=ensureAdminListingTools();if(!tools)return;
  const type=tools.querySelector('.stage18-type'),previous=type.value;
  type.replaceChildren(crmOption('','جميع الأنواع'));
- for(const value of [...new Set(listings.map(x=>String(x.property_type||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar')))type.append(crmOption(value,value));
+ const standardTypes=['أرض','شقة','دور','فيلا','عمارة','مزرعة','مستودع','محل تجاري','أخرى'];
+ const extraTypes=[...new Set(listings.map(x=>String(x.property_type||'').trim()).filter(v=>v&&!standardTypes.includes(v)))].sort((a,b)=>a.localeCompare(b,'ar'));
+ for(const value of [...standardTypes,...extraTypes])type.append(crmOption(value,value));
  type.value=previous;
  const search=tools.querySelector('.stage18-search').value.trim().toLocaleLowerCase('ar');
  const selectedType=type.value,status=tools.querySelector('.stage18-status').value,maxRaw=tools.querySelector('.stage18-max').value,sort=tools.querySelector('.stage18-sort').value;
