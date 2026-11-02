@@ -83,6 +83,17 @@ function setupAdminNavigation(){
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
  }
+ // Keep the long admin sidebar independently scrollable on desktop.
+ if(!document.getElementById('manahelScrollableNavStyle')){
+  const style=document.createElement('style');style.id='manahelScrollableNavStyle';
+  style.textContent=`@media (min-width: 800px) {
+   #manahelAdminNav { position: sticky; top: 12px; align-self: start;
+    max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden;
+    overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
+   #manahelAdminNav .manahel-admin-nav-link { flex-shrink: 0; }
+  }`;
+  document.head.append(style);
+ }
  const count=requests.filter(x=>!x.status||x.status==='جديد').length;
  const indicator=$('manahelNewRequests');if(indicator){indicator.textContent='الطلبات الجديدة: '+count;indicator.classList.toggle('has-new',count>0)}
 }
