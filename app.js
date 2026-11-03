@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const marketing=$('manahelMarketingSection');if(marketing)marketing.replaceChildren();const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();await loadOwnerContacts();renderStage21Validity();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -322,7 +322,7 @@ async function loadCrmContacts(){
  const root=ensureCrmSection();
  const [c,l]=await Promise.all([db.from('crm_contacts').select('*').order('created_at',{ascending:false}),db.from('crm_links').select('*')]);
  if(c.error||l.error){root.querySelector('.crm-status').textContent='تعذر تحميل سجل العملاء. نفّذ ملف crm_database.sql في Supabase أولًا وتحقق من الصلاحيات.';return}
- crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderStage21Validity();renderStage22OwnerContacts();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
+ crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
 }
 function ensureCrmSection(){
  let root=$('crmContactsSection');if(root)return root;
@@ -590,7 +590,7 @@ async function loadOwnerContacts(){
  const {data,error}=await db.from('property_owner_contacts').select('id,property_id,contact_id,contacted_at,contact_method,contact_result,notes,next_followup_at,created_at').order('contacted_at',{ascending:false}).limit(1000);
  if(error){console.warn('Stage 22 history unavailable:',error);ownerContactRows=[];stage22LoadError=error.message}
  else{ownerContactRows=data||[];stage22LoadError=''}
- renderStage22OwnerContacts();renderAdminListings();
+ renderStage22OwnerContacts();renderAdminListings();renderStage23OwnerCenter();
 }
 let stage22LoadError='';
 function stage22LatestContact(x){
@@ -651,6 +651,63 @@ function renderStage22OwnerContacts(){
  const recent=el('div');recent.append(el('h4','','أحدث نتائج التواصل'));
  for(const r of ownerContactRows.slice(0,15)){const x=listings.find(p=>p.id===r.property_id);recent.append(el('p','',`${x?.title||'عقار'} — ${r.contact_result} — ${stage22Date(r.contacted_at)}`))}
  root.append(recent);
+}
+
+// Stage 23: read-only owner follow-up center; no automatic messages or database mutations.
+let stage23Filters={search:'',availability:'',followup:'all'};
+function renderStage23OwnerCenter(){
+ if(!authorized)return;
+ let root=$('stage23OwnerCenter');
+ if(!root){root=el('section','form-card stage23-owner-center');root.id='stage23OwnerCenter';const anchor=$('stage22OwnerContactsSection')||$('stage21ValiditySection')||$('adminListings');anchor.after(root)}
+ root.replaceChildren();root.append(el('h3','','مركز متابعة الملاك والعروض العقارية — المرحلة 23'),el('p','','لوحة متابعة للمدير فقط. تعتمد على السجلات المحفوظة، ولا تُرسل رسائل أو تُغيّر حالات العقارات تلقائيًا.'));
+ if(stage22LoadError){root.append(el('p','status error','تعذر تحميل سجل التواصل؛ لا يمكن حساب المتابعات بدقة: '+stage22LoadError));return}
+ const latest=new Map();for(const r of ownerContactRows){if(!latest.has(r.property_id))latest.set(r.property_id,r)}
+ const today=new Date();today.setHours(0,0,0,0);const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1);
+ const rows=listings.map(x=>{
+  const contacts=crmLinks.filter(l=>l.property_id===x.id).map(l=>crmContacts.find(c=>c.id===l.contact_id)).filter(Boolean);
+  const owner=contacts.find(c=>c.role==='مالك عقار')||contacts[0]||null;
+  const history=ownerContactRows.filter(r=>r.property_id===x.id);
+  // A newer contact may supersede an earlier follow-up, so only the latest recorded contact drives this queue.
+  const last=latest.get(x.id)||null;
+  const due=last?.next_followup_at?new Date(last.next_followup_at):null;
+  const dueValid=due&&!Number.isNaN(due.getTime());
+  const state=dueValid?(due<today?'overdue':due<tomorrow?'today':'upcoming'):'none';
+  const stale=stage21Age(x);
+  return {x,owner,history,last,due:dueValid?due:null,state,needsConfirmation:stale===null||stale>30};
+ });
+ const stats=el('div','followup-stats');for(const [name,count] of [
+  ['متابعة متأخرة',rows.filter(r=>r.state==='overdue').length],
+  ['متابعة اليوم',rows.filter(r=>r.state==='today').length],
+  ['متابعة قادمة',rows.filter(r=>r.state==='upcoming').length],
+  ['تأكيد المالك مطلوب',rows.filter(r=>r.needsConfirmation).length],
+  ['بدون مالك مرتبط',rows.filter(r=>!r.owner).length]
+ ]){const card=el('div','followup-stat');card.append(el('span','',name),el('strong','',String(count)));stats.append(card)}root.append(stats);
+ const tools=el('div','request-tools');const search=el('input');search.type='search';search.placeholder='بحث باسم العقار أو المالك أو الجوال';search.value=stage23Filters.search;
+ const availability=el('select');for(const v of ['','متاح','محجوز','مباع','مؤجر','غير متاح مؤقتًا'])availability.append(crmOption(v,v||'جميع حالات التوفر'));availability.value=stage23Filters.availability;
+ const filter=el('select');for(const [v,t] of [['all','جميع العروض'],['overdue','متأخرة'],['today','متابعة اليوم'],['upcoming','متابعة قادمة'],['none','بدون موعد متابعة'],['confirmation','تحتاج تأكيد المالك'],['unlinked','بدون مالك مرتبط']])filter.append(crmOption(v,t));filter.value=stage23Filters.followup;
+ const resultCount=el('small');tools.append(search,availability,filter,resultCount);root.append(tools);
+ const output=el('div');root.append(output);
+ function display(){stage23Filters={search:search.value,availability:availability.value,followup:filter.value};const q=search.value.trim().toLocaleLowerCase('ar');
+  const filtered=rows.filter(r=>(!q||[r.x.title,r.x.city,r.x.district,r.owner?.full_name,r.owner?.phone].join(' ').toLocaleLowerCase('ar').includes(q))&&(!availability.value||(r.x.availability_status||'متاح')===availability.value)&&(
+   filter.value==='all'||filter.value===r.state||(filter.value==='confirmation'&&r.needsConfirmation)||(filter.value==='unlinked'&&!r.owner)));
+  const priority={overdue:0,today:1,upcoming:2,none:3};filtered.sort((a,b)=>(priority[a.state]-priority[b.state])||(a.due&&b.due?a.due-b.due:0));
+  resultCount.textContent='النتائج: '+filtered.length+' من '+rows.length;output.replaceChildren();
+  if(!filtered.length){output.append(el('p','','لا توجد عروض مطابقة.'));return}
+  for(const r of filtered){const card=el('div','admin-item');card.append(el('strong','',r.x.title||'عقار بدون عنوان'));
+   card.append(el('small','',`${r.x.city||''} · ${r.x.district||''} · حالة التوفر: ${r.x.availability_status||'غير محددة'} · ${r.x.is_published?'منشور':'غير منشور'}`));
+   card.append(el('p','',r.owner?`المالك/جهة الاتصال: ${r.owner.full_name} — ${r.owner.phone||'بدون رقم'}`:'لا يوجد مالك أو جهة اتصال مرتبطة بالعقار'));
+   card.append(el('small','',r.last?`آخر تواصل: ${stage22Date(r.last.contacted_at)} — ${r.last.contact_result}`:'لم يُسجل تواصل مع المالك'));
+   const dueLabel=r.state==='overdue'?'متابعة متأخرة':r.state==='today'?'متابعة اليوم':r.state==='upcoming'?'متابعة قادمة':'لا يوجد موعد متابعة في آخر تواصل';
+   card.append(el('small','',dueLabel+(r.due?' — '+stage22Date(r.due):'')));
+   if(r.needsConfirmation)card.append(el('small','','⚠ يلزم تأكيد توفر العقار من المالك (لم يُسجل تأكيد أو تجاوز 30 يومًا)'));
+   const actions=el('div','actions');
+   if(r.owner){const phone=crmPhone(r.owner.phone);if(phone.length>=9&&phone.length<=15){const wa=el('a','ghost','واتساب المالك');wa.href='https://wa.me/'+phone+'?text='+encodeURIComponent('السلام عليكم، نرغب بالاستفسار عن استمرار توفر العقار: '+r.x.title);wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}}
+   const historyButton=el('button','ghost','فتح سجل التواصل');historyButton.type='button';historyButton.onclick=()=>{const section=$('stage22OwnerContactsSection');if(section){section.scrollIntoView({behavior:'smooth',block:'start'});const propertySelect=section.querySelector('form select');if(propertySelect){propertySelect.value=r.x.id;propertySelect.dispatchEvent(new Event('change'))}}};actions.append(historyButton);
+   const task=el('button','ghost','إنشاء مهمة متابعة');task.type='button';task.onclick=()=>stage21PrepareFollowup(r.x);actions.append(task);
+   card.append(actions);card.append(stage22PropertyPanel(r.x));output.append(card)
+  }
+ }
+ search.oninput=display;availability.onchange=display;filter.onchange=display;display();
 }
 
 // Stage 21: read-only validity overview and manual follow-up preparation.
