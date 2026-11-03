@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const marketing=$('manahelMarketingSection');if(marketing)marketing.replaceChildren();const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();await stage29LoadHistory();renderStage26UnifiedSearch();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();renderStage30Board();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();await stage29LoadHistory();renderStage26UnifiedSearch();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();renderStage30Board();renderStage31Reports();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['مراجعة جهات الاتصال المكررة','stage27DuplicatesSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['لوحة متابعة العملاء','stage30CustomerBoard'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['مراجعة جهات الاتصال المكررة','stage27DuplicatesSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['لوحة متابعة العملاء','stage30CustomerBoard'],['تقارير التواصل مع العملاء','stage31ContactReports'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -170,7 +170,7 @@ function renderDashboard(){
   ['الصفقات المكتملة',completed,'حسب مرحلة الصفقة'],['طلبات قيد المتابعة',followups,'تحتاج متابعة']]){
   const card=el('div','dash-stat stage11-stat');card.append(el('span','dash-stat-label',label),el('strong','dash-stat-value',String(value)),el('small','stage11-hint',hint));cards.append(card)}
   dash.append(cards);
-  renderStage25DashboardSummary(dash);renderStage30DashboardSummary(dash);
+  renderStage25DashboardSummary(dash);renderStage30DashboardSummary(dash);renderStage31DashboardSummary(dash);
  const sections=el('div','dash-sections stage11-sections');
  const makePanel=title=>{const box=el('div','dash-panel');box.append(el('h4','',title));return box};
  const barPanel=(title,rows,total)=>{const box=makePanel(title);if(!rows.length){box.append(el('p','dash-empty','لا توجد بيانات لهذه الفترة.'));return box}
@@ -396,7 +396,7 @@ async function loadCrmContacts(){
   crmContactsLoadMessage='تعذر التأكد من اكتمال تحميل جهات الاتصال: '+error.message+' — النتائج الحالية غير معتمدة.';
  }
  root.querySelector('.crm-status').textContent=crmContactsLoadMessage;
- renderCrm();renderStage27Duplicates();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();renderStage30Board();if($('manahelMarketingSection'))renderMarketing();
+ renderCrm();renderStage27Duplicates();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();renderStage30Board();renderStage31Reports();if($('manahelMarketingSection'))renderMarketing();
 }
 
 function ensureCrmSection(){
@@ -567,7 +567,7 @@ async function stage29LoadHistory(){
  stage29HistoryLoaded=false;stage29HistoryError='';
  try{stage29History=await crmFetchAll('crm_contact_history');stage29HistoryLoaded=true;}
  catch(e){stage29History=[];stage29HistoryError=e.message;console.error('Stage 29 history:',e)}
- if($('crmList'))renderCrm();renderStage30Board();
+ if($('crmList'))renderCrm();renderStage30Board();renderStage31Reports();renderDashboard();
 }
 function stage29HistoryPreview(contact){
  const box=el('details','crm-links stage29-history');
@@ -1851,6 +1851,92 @@ function renderStage30Board(){
   if(r.task){const taskBtn=el('button','ghost','إدارة المهمة');taskBtn.type='button';taskBtn.onclick=()=>{stage30Navigate('manahelFollowupsSection');const q=$('followupSearch');if(q){q.value=r.task.title;renderFollowups()}};actions.append(taskBtn)}
   card.append(actions);root.append(card);
  }
+}
+
+// Stage 31: read-only contact performance reports; history is a manual activity log.
+let stage31Period='30',stage31Search='',stage31Method='all',stage31Result='all',stage31Coverage='all';
+function stage31Range(period){
+ const now=new Date();if(period==='all')return null;
+ const start=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+ if(period==='7')start.setDate(start.getDate()-6);
+ else if(period==='30')start.setDate(start.getDate()-29);
+ else if(period==='90')start.setDate(start.getDate()-89);
+ return start.getTime();
+}
+function stage31Data(period=stage31Period){
+ const since=stage31Range(period),now=Date.now();
+ const history=stage29History.filter(h=>{const t=Date.parse(h.contacted_at);return Number.isFinite(t)&&t<=now&&(since===null||t>=since)});
+ const allIds=new Set(stage29History.map(h=>h.contact_id));
+ const periodIds=new Set(history.map(h=>h.contact_id));
+ const contactsById=new Map(crmContacts.map(c=>[c.id,c]));
+ const counts=(key,rows=history)=>{const map=new Map();for(const h of rows){const k=String(h[key]||'غير محدد');map.set(k,(map.get(k)||0)+1)}return [...map.entries()].sort((a,b)=>b[1]-a[1])};
+ return {history,allIds,periodIds,contactsById,methods:counts('contact_method'),results:counts('contact_result'),statuses:counts('client_status'),coverage:crmContacts.length?Math.round(100*allIds.size/crmContacts.length*10)/10:0};
+}
+function stage31Ready(){return authorized&&crmContactsComplete&&stage29HistoryLoaded}
+function stage31Styles(){if($('stage31Styles'))return;const st=el('style');st.id='stage31Styles';st.textContent=`
+ .stage31-summary,.stage31-report{border:1px solid #dce3ed;border-radius:14px;padding:16px;margin:16px 0;min-width:0}
+ .stage31-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:12px 0}
+ .stage31-stat{border:1px solid #dce3ed;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+ .stage31-stat strong{font-size:1.5rem}
+ .stage31-toolbar{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}
+ .stage31-toolbar input,.stage31-toolbar select{min-width:145px;max-width:100%;flex:1;padding:9px}
+ .stage31-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+ .stage31-group{border:1px solid #dce3ed;border-radius:12px;padding:12px}
+ .stage31-group p{display:flex;justify-content:space-between;gap:8px;margin:8px 0}
+ .stage31-row{border:1px solid #e1e5eb;border-radius:10px;padding:12px;margin:9px 0;display:flex;flex-direction:column;gap:5px;overflow-wrap:anywhere}
+ .stage31-note{color:#6b7280;font-size:.9rem}
+ `;document.head.append(st)}
+function stage31Metric(label,value){const node=el('div','stage31-stat');node.append(el('span','',label),el('strong','',String(value)));return node}
+function renderStage31DashboardSummary(dash){
+ if(!authorized)return;stage31Styles();const box=el('section','stage31-summary');box.append(el('h4','','ملخص أداء التواصل مع العملاء'));
+ if(!stage31Ready()){box.append(el('p','stage31-note','يكتمل التقرير بعد تحميل جميع جهات الاتصال وسجل التواصل.'));dash.append(box);return}
+ const d=stage31Data('30'),stats=el('div','stage31-stats');
+ for(const [label,value] of [['عمليات التواصل خلال 30 يومًا',d.history.length],['عبر واتساب',d.history.filter(h=>h.contact_method==='واتساب').length],['عملاء لديهم تواصل خلال 30 يومًا',d.periodIds.size],['عملاء بلا سجل تواصل مطلقًا',crmContacts.filter(c=>!d.allIds.has(c.id)).length]])stats.append(stage31Metric(label,value));
+ box.append(stats,el('p','stage31-note','المؤشرات من سجلات التواصل اليدوية فقط؛ فتح واتساب لا يُحتسب دون تسجيل. عدم وجود سجل لا يثبت عدم حدوث تواصل.'));
+ const btn=el('button','ghost','فتح تقارير التواصل');btn.type='button';btn.onclick=()=>{renderStage31Reports();const target=$('stage31ContactReports');target?.scrollIntoView({behavior:'smooth',block:'start'})};box.append(btn);dash.append(box);
+}
+function stage31Export(rows){
+ if(!stage31Ready()){alert('لم يكتمل تحميل البيانات؛ لا يمكن التصدير.');return}
+ const columns=['نوع السطر','اسم العميل','رقم الجوال','التصنيف','المدينة','الحي','تاريخ التواصل','طريقة التواصل','نتيجة التواصل','حالة العميل','ملاحظات'];
+ const xml=v=>String(v??'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+ const data=[columns,...rows.map(({contact,h})=>[h?'تواصل مسجل':'لا يوجد سجل تواصل',contact?.full_name||'عميل غير موجود',contact?.phone||'',contact?.role||'',contact?.city||'',contact?.district||'',h?.contacted_at?new Date(h.contacted_at).toLocaleString('ar-SA'):'',h?.contact_method||'',h?.contact_result||'',h?.client_status||'',h?.notes||''])];
+ const colName=i=>{let x='';for(i++;i;i=Math.floor((i-1)/26))x=String.fromCharCode(65+(i-1)%26)+x;return x};
+ const sheetRows=data.map((row,i)=>`<row r="${i+1}">${row.map((v,j)=>`<c r="${colName(j)}${i+1}" t="inlineStr"${i===0?' s="1"':''}><is><t xml:space="preserve">${xml(v)}</t></is></c>`).join('')}</row>`).join('');
+ const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0" rightToLeft="1"/></sheetViews><cols><col min="1" max="1" width="23" customWidth="1"/><col min="2" max="2" width="38" customWidth="1"/><col min="3" max="3" width="22" customWidth="1"/><col min="4" max="10" width="23" customWidth="1"/><col min="11" max="11" width="55" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:K${data.length}"/></worksheet>`;
+ const files=[
+ ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+ ['_rels/.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+ ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="تقارير التواصل" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+ ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+ ['xl/styles.xml','<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/></font><font><b/><sz val="11"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>'],
+ ['xl/worksheets/sheet1.xml',sheet]
+ ];
+ try{const url=URL.createObjectURL(stage28XlsxZip(files)),a=el('a');a.href=url;a.download='manahel-contact-report-'+new Date().toISOString().slice(0,10)+'.xlsx';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}catch(e){console.error('Stage 31 Excel:',e);alert('تعذر تصدير التقرير: '+e.message)}
+}
+function renderStage31Reports(){
+ if(!authorized)return;stage31Styles();let root=$('stage31ContactReports');if(!root){root=el('section','form-card stage31-report');root.id='stage31ContactReports';($('manahelAdminContent')||$('adminPanel')).append(root)}
+ root.replaceChildren();root.append(el('h3','','تقارير أداء التواصل مع العملاء'),el('p','stage31-note','تعتمد التقارير على تسجيل التواصل يدويًا. لا يعني عدم وجود سجل أن العميل لم يُتواصل معه خارج النظام.'));
+ if(!stage31Ready()){root.append(el('p','','البيانات غير مكتملة أو تعذر تحميلها؛ لن تُعرض إحصائيات أو ملفات تصدير غير معتمدة.'));return}
+ const d=stage31Data(),stats=el('div','stage31-stats');
+ for(const [label,value] of [['عمليات التواصل',d.history.length],['اتصالات',d.history.filter(h=>h.contact_method==='اتصال').length],['واتساب',d.history.filter(h=>h.contact_method==='واتساب').length],['عملاء لديهم تواصل خلال الفترة',d.periodIds.size],['عملاء بلا سجل تواصل مطلقًا',crmContacts.filter(c=>!d.allIds.has(c.id)).length],['تغطية السجل التراكمية',d.coverage+'%']])stats.append(stage31Metric(label,value));root.append(stats);
+ const toolbar=el('div','stage31-toolbar');
+ const pick=(value,options,callback,label)=>{const select=el('select');select.setAttribute('aria-label',label);for(const [v,l] of options)select.append(crmOption(v,l));select.value=value;select.onchange=()=>callback(select.value);toolbar.append(select);return select};
+ pick(stage31Period,[['today','اليوم'],['7','آخر 7 أيام'],['30','آخر 30 يومًا'],['90','آخر 90 يومًا'],['all','جميع الفترات']],v=>{stage31Period=v;renderStage31Reports()},'فترة التقرير');
+ pick(stage31Method,[['all','جميع طرق التواصل'],...['اتصال','واتساب','زيارة','أخرى'].map(x=>[x,x])],v=>{stage31Method=v;renderStage31Reports()},'طريقة التواصل');
+ pick(stage31Result,[['all','جميع النتائج'],...new Set(stage29History.map(h=>h.contact_result).filter(Boolean))].map(x=>Array.isArray(x)?x:[x,x]),v=>{stage31Result=v;renderStage31Reports()},'نتيجة التواصل');
+ pick(stage31Coverage,[['all','السجلات والعملاء بلا سجل'],['logged','سجلات التواصل فقط'],['never','عملاء بلا سجل مطلقًا']],v=>{stage31Coverage=v;renderStage31Reports()},'نوع السجلات');
+ const search=el('input');search.type='search';search.placeholder='بحث باسم العميل أو الجوال';search.value=stage31Search;search.setAttribute('aria-label','بحث عن عميل');search.oninput=()=>{stage31Search=search.value;renderStage31Reports();const next=$('stage31Search');next?.focus()};search.id='stage31Search';toolbar.append(search);root.append(toolbar);
+ const group=el('div','stage31-groups');for(const [title,values] of [['طرق التواصل',d.methods],['نتائج التواصل',d.results],['حالات العملاء المسجلة',d.statuses]]){const card=el('div','stage31-group');card.append(el('h4','',title));if(!values.length)card.append(el('p','','لا توجد سجلات لهذه الفترة'));for(const [name,count] of values)card.append(el('p','',name+' — '+count));group.append(card)}root.append(group);
+ const q=stage31Search.trim().toLocaleLowerCase('ar');const match=c=>!q||[c?.full_name,c?.phone].join(' ').toLocaleLowerCase('ar').includes(q);
+ const rows=[];
+ if(stage31Coverage!=='never')for(const h of d.history){const contact=d.contactsById.get(h.contact_id);if((stage31Method==='all'||h.contact_method===stage31Method)&&(stage31Result==='all'||h.contact_result===stage31Result)&&match(contact))rows.push({contact,h})}
+ // The never-contacted category is all-time; method/result filters apply only to logged events.
+ if(stage31Coverage!=='logged'&&stage31Method==='all'&&stage31Result==='all')for(const contact of crmContacts){if(!d.allIds.has(contact.id)&&match(contact))rows.push({contact,h:null})}
+ rows.sort((a,b)=>String(b.h?.contacted_at||'').localeCompare(String(a.h?.contacted_at||'')));
+ const action=el('div','stage31-toolbar'),exportBtn=el('button','ghost','تصدير النتائج إلى Excel (.xlsx)');exportBtn.type='button';exportBtn.disabled=!rows.length;exportBtn.onclick=()=>stage31Export(rows);action.append(exportBtn);root.append(action);
+ root.append(el('p','stage31-note',`النتائج: ${rows.length} صف. عميل واحد قد يظهر أكثر من مرة عند تسجيل اتصالات متعددة. العملاء بلا سجل محسوبون عبر جميع الفترات، وليس الفترة المختارة فقط.`));
+ const list=el('div');for(const r of rows.slice(0,150)){const card=el('article','stage31-row');card.append(el('strong','',r.contact?.full_name||'عميل غير موجود في سجل العملاء'),el('small','',`${r.contact?.phone||'—'} · ${r.contact?.role||'—'}`));if(r.h){card.append(el('small','',`${new Date(r.h.contacted_at).toLocaleString('ar-SA')} · ${r.h.contact_method} · ${r.h.contact_result} · ${r.h.client_status}`));if(r.h.notes)card.append(el('p','',r.h.notes))}else card.append(el('small','','لا يوجد سجل تواصل سابق'));list.append(card)}root.append(list);
+ if(rows.length>150)root.append(el('p','stage31-note',`يُعرض أول 150 صفًا لتسريع الصفحة؛ تصدير Excel يشمل جميع الصفوف ${rows.length}.`));
 }
 
 // Stage 13: human-reviewed WhatsApp Web messages, without automated sending.
