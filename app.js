@@ -419,7 +419,18 @@ function ensureCrmSection(){
  save.disabled=true;const q=key?db.from('crm_contacts').update(data).eq('id',key):db.from('crm_contacts').insert(data);const {error}=await q;save.disabled=false;
  if(error){alert('تعذر حفظ العميل: '+error.message);return}form.reset();form.elements.id.value='';save.textContent='حفظ العميل';await loadCrmContacts();
  };
- const tools=el('div','crm-tools'),search=el('input');search.type='search';search.placeholder='بحث بالاسم أو الجوال';search.id='crmSearch';const filter=el('select');filter.id='crmRoleFilter';filter.append(crmOption('','جميع التصنيفات'));crmRoles.forEach(x=>filter.append(crmOption(x,x)));search.oninput=renderCrm;filter.onchange=renderCrm;tools.append(search,filter);
+  // Stage 28: client-side filters, ordering and Excel-compatible CSV export.
+ const tools=el('div','crm-tools');
+  const search=el('input');search.type='search';search.placeholder='بحث بالاسم أو الجوال أو المدينة أو الحي';search.id='crmSearch';
+  const filter=el('select');filter.id='crmRoleFilter';filter.append(crmOption('','جميع التصنيفات'));crmRoles.forEach(x=>filter.append(crmOption(x,x)));
+  const city=el('select');city.id='crmCityFilter';city.setAttribute('aria-label','تصفية حسب المدينة');
+  const district=el('select');district.id='crmDistrictFilter';district.setAttribute('aria-label','تصفية حسب الحي');
+  const order=el('select');order.id='crmSort';order.setAttribute('aria-label','ترتيب جهات الاتصال');
+  for(const [value,label] of [['newest','الأحدث إضافة'],['oldest','الأقدم إضافة'],['name_asc','الاسم أ–ي'],['name_desc','الاسم ي–أ'],['city','حسب المدينة']])order.append(crmOption(value,label));
+  const exportBtn=el('button','ghost','تصدير النتائج CSV (Excel)');exportBtn.type='button';exportBtn.id='crmExportCsv';exportBtn.onclick=stage28ExportCsv;
+  const clear=el('button','ghost','مسح الفلاتر');clear.type='button';clear.onclick=()=>{search.value='';filter.value='';city.value='';district.value='';order.value='newest';renderCrm()};
+  search.oninput=renderCrm;filter.onchange=renderCrm;city.onchange=()=>{district.value='';renderCrm()};district.onchange=renderCrm;order.onchange=renderCrm;
+  tools.append(search,filter,city,district,order,exportBtn,clear);
  const count=el('small','crm-count');count.id='crmCount';const items=el('div','crm-list');items.id='crmList';const status=el('p','crm-status');root.append(form,tools,count,items,status);
  const panel=$('manahelAdminContent')||$('adminPanel');panel.append(root);
  ensureCrmImporter(root);
@@ -501,9 +512,10 @@ function ensureCrmImporter(root){
  root.querySelector('.crm-form').insertAdjacentElement('afterend',panel);
  let pending=[];
  function prepare(){
-  const seen=new Set(crmContacts.map(c=>crmPhone(c.phone)).filter(Boolean));const local=new Set();let invalid=0,duplicate=0;
+  if(!crmContactsComplete){summary.textContent='تعذر التحقق من اكتمال سجل العملاء؛ أعد تحميل البيانات قبل الاستيراد.';go.disabled=true;return}
+  const seen=new Set(crmContacts.map(c=>stage27Phone(c.phone)).filter(Boolean));const local=new Set();let invalid=0,duplicate=0;
   pending=[];
-  for(const r of crmImportRows){const name=String(r.full_name||'').trim().slice(0,160),phone=crmPhone(r.phone);if(!name||phone.length<9||phone.length>15||/(?:=[0-9A-F]{2}){2,}/i.test(name)||name.includes(' ')){invalid++;continue}
+  for(const r of crmImportRows){const name=String(r.full_name||'').trim().slice(0,160),phone=stage27Phone(r.phone);if(!name||phone.length<9||phone.length>15||/(?:=[0-9A-F]{2}){2,}/i.test(name)){invalid++;continue}
    if(seen.has(phone)||local.has(phone)){duplicate++;continue}local.add(phone);
    pending.push({full_name:name,phone,role:crmRoles.includes(r.role)?r.role:role.value,city:String(r.city||'').trim().slice(0,160)||null,district:String(r.district||'').trim().slice(0,160)||null});
   }
@@ -529,9 +541,11 @@ function ensureCrmImporter(root){
 }
 
 function renderCrm(){
- const root=ensureCrmSection(),list=$('crmList'),search=($('crmSearch')?.value||'').trim().toLowerCase(),role=$('crmRoleFilter')?.value||'';list.replaceChildren();
- const found=crmContacts.filter(x=>(!role||x.role===role)&&(!search||[x.full_name,x.phone,x.city,x.district].join(' ').toLowerCase().includes(search)));
- $('crmCount').textContent=`النتائج: ${found.length} من ${crmContacts.length}`;
+ const root=ensureCrmSection(),list=$('crmList');list.replaceChildren();
+ stage28RefreshLocationOptions();
+ const found=stage28FilteredContacts();
+ $('crmCount').textContent=`النتائج: ${found.length} من ${crmContacts.length}${crmContactsComplete?'':' — التحميل غير مكتمل، النتائج غير معتمدة'}`;
+ const exportBtn=$('crmExportCsv');if(exportBtn)exportBtn.disabled=!crmContactsComplete||!found.length;
  for(const x of found){const card=el('article','crm-card');card.append(el('strong','',x.full_name+' — '+x.role),el('small','',x.phone+' · '+[x.city,x.district].filter(Boolean).join(' / ')));if(x.notes)card.append(el('p','',x.notes));
  const actions=el('div','crm-actions'),edit=el('button','ghost','تعديل');edit.type='button';edit.onclick=()=>{const form=$('crmContactForm');for(const k of ['id','full_name','phone','role','city','district','notes'])form.elements[k].value=x[k]||'';form.querySelector('[type=submit]').textContent='تحديث العميل';form.scrollIntoView({behavior:'smooth',block:'start'})};actions.append(edit);
  const number=crmPhone(x.phone);if(number.length>=9&&number.length<=15){const wa=el('a','crm-whatsapp','واتساب');wa.href='https://wa.me/'+number;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
@@ -540,6 +554,34 @@ function renderCrm(){
  const existing=crmLinks.filter(z=>z.contact_id===x.id);for(const z of existing){const record=z.property_id?listings.find(p=>p.id===z.property_id):requests.find(r=>r.id===z.request_id);const line=el('div','crm-linked-row');line.append(el('span','',(z.property_id?'عقار: ':'طلب: ')+(record?.title||record?.full_name||'سجل مرتبط')));const remove=el('button','ghost','فك الربط');remove.type='button';remove.onclick=async()=>{const {error}=await db.from('crm_links').delete().eq('id',z.id);if(error)alert(error.message);else await loadCrmContacts()};line.append(remove);links.append(line)}
  const linkRow=el('div','crm-link-add'),kind=el('select');kind.append(crmOption('property','ربط بعقار'),crmOption('request','ربط بطلب'));const target=el('select');const fill=()=>{target.replaceChildren();const rows=kind.value==='property'?listings:requests;target.append(crmOption('','اختر السجل'));for(const r of rows)target.append(crmOption(r.id,r.title||r.full_name||r.id))};kind.onchange=fill;fill();const add=el('button','ghost','ربط');add.type='button';add.onclick=async()=>{if(!target.value)return;const payload={contact_id:x.id,property_id:kind.value==='property'?target.value:null,request_id:kind.value==='request'?target.value:null};const {error}=await db.from('crm_links').insert(payload);if(error)alert('تعذر الربط: '+error.message);else await loadCrmContacts()};linkRow.append(kind,target,add);links.append(linkRow);card.append(links);list.append(card)}
  if(!found.length)list.append(el('p','','لا توجد سجلات مطابقة.'));
+}
+
+
+// Stage 28: read-only CRM filtering and CSV export; no database mutations.
+function stage28Normalize(v){return String(v??'').normalize('NFKC').trim().toLocaleLowerCase('ar').replace(/\s+/g,' ')}
+function stage28RefreshLocationOptions(){
+ const city=$('crmCityFilter'),district=$('crmDistrictFilter');if(!city||!district)return;
+ const previousCity=city.value,previousDistrict=district.value;
+ const cities=[...new Set(crmContacts.map(x=>String(x.city||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+ city.replaceChildren(crmOption('','جميع المدن'));for(const c of cities)city.append(crmOption(c,c));city.value=cities.includes(previousCity)?previousCity:'';
+ const districts=[...new Set(crmContacts.filter(x=>!city.value||String(x.city||'').trim()===city.value).map(x=>String(x.district||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+ district.replaceChildren(crmOption('','جميع الأحياء'));for(const d of districts)district.append(crmOption(d,d));district.value=districts.includes(previousDistrict)?previousDistrict:'';
+}
+function stage28FilteredContacts(){
+ const search=stage28Normalize($('crmSearch')?.value),role=$('crmRoleFilter')?.value||'',city=$('crmCityFilter')?.value||'',district=$('crmDistrictFilter')?.value||'',sort=$('crmSort')?.value||'newest';
+ const found=crmContacts.filter(x=>(!role||x.role===role)&&(!city||String(x.city||'').trim()===city)&&(!district||String(x.district||'').trim()===district)&&(!search||[x.full_name,x.phone,x.city,x.district,x.role].some(v=>stage28Normalize(v).includes(search))));
+ const cmp=(a,b)=>String(a||'').localeCompare(String(b||''),'ar',{numeric:true,sensitivity:'base'});
+ found.sort((a,b)=>sort==='name_asc'?cmp(a.full_name,b.full_name):sort==='name_desc'?cmp(b.full_name,a.full_name):sort==='city'?cmp(a.city,b.city)||cmp(a.full_name,b.full_name):sort==='oldest'?cmp(a.created_at,b.created_at):cmp(b.created_at,a.created_at));
+ return found;
+}
+function stage28ExportCsv(){
+ if(!authorized||!crmContactsComplete){alert('يجب اكتمال تحميل جهات الاتصال والتحقق من عددها قبل التصدير.');return}
+ const rows=stage28FilteredContacts();if(!rows.length){alert('لا توجد جهات اتصال مطابقة للتصدير.');return}
+ const csvCell=value=>{const v=String(value??'');const safe=/^[\s\u0000-\u001f]*[=+@\-]/.test(v)?"'"+v:v;return '"'+safe.replace(/"/g,'""')+'"'};
+ const columns=[['الاسم','full_name'],['الجوال','phone'],['التصنيف','role'],['المدينة','city'],['الحي','district'],['الملاحظات','notes'],['تاريخ الإضافة','created_at']];
+ const csv='\uFEFF'+[columns.map(c=>csvCell(c[0])).join(','),...rows.map(r=>columns.map(([,key])=>csvCell(r[key])).join(','))].join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+ const a=document.createElement('a');a.href=url;a.download='manahel-contacts-'+new Date().toISOString().slice(0,10)+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 // Stage 27: read-only CRM duplicate review. No merge, deletion, or database writes.
