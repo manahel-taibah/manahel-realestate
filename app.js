@@ -354,16 +354,51 @@ function renderRequestMatches(request){
 
 // CRM: isolated admin-only module; does not change public listing or request flows.
 let crmContacts=[],crmLinks=[];
+let crmContactsComplete=false,crmContactsLoadMessage='';
 const crmRoles=['مالك عقار','وسيط عقاري','مطور عقاري','مشترٍ','مستثمر','أخرى'];
 function crmOption(value,label){const o=el('option','',label);o.value=value;return o}
 function crmPhone(v){let x=String(v||'').replace(/[^\d]/g,'');if(x.startsWith('00'))x=x.slice(2);if(x.startsWith('0'))x='966'+x.slice(1);return x}
+// Fetch in pages smaller than the default Supabase/PostgREST maximum row limit.
+// A count check prevents silently presenting incomplete duplicate-search results.
+async function crmFetchAll(table){
+ const pageSize=500, rows=[];
+ let expected=null;
+ for(let offset=0;offset<1000000;offset+=pageSize){
+  const query=db.from(table).select('*',{count:offset===0?'exact':undefined})
+   .order('id',{ascending:true}).range(offset,offset+pageSize-1);
+  const {data,error,count}=await query;
+  if(error)throw new Error(table+': '+error.message);
+  if(offset===0&&Number.isInteger(count))expected=count;
+  rows.push(...(data||[]));
+  if((data||[]).length<pageSize)break;
+  if(offset+pageSize>=1000000)throw new Error('تجاوز عدد السجلات حد الأمان للتحميل');
+ }
+ if(expected===null)throw new Error('تعذر التحقق من العدد الإجمالي للسجلات في '+table);
+ if(rows.length!==expected)throw new Error('عدد السجلات المحمّلة لا يطابق إجمالي قاعدة البيانات في '+table+' ('+rows.length+' من '+expected+')');
+ if(new Set(rows.map(x=>x.id)).size!==rows.length)throw new Error('تكررت معرفات السجلات أثناء تحميل '+table);
+ return rows;
+}
 async function loadCrmContacts(){
  if(!authorized||!db)return;
  const root=ensureCrmSection();
- const [c,l]=await Promise.all([db.from('crm_contacts').select('*').order('created_at',{ascending:false}),db.from('crm_links').select('*')]);
- if(c.error||l.error){root.querySelector('.crm-status').textContent='تعذر تحميل سجل العملاء. نفّذ ملف crm_database.sql في Supabase أولًا وتحقق من الصلاحيات.';return}
- crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderStage27Duplicates();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
+ crmContactsComplete=false;
+ crmContactsLoadMessage='جارٍ تحميل جهات الاتصال والتحقق من اكتمالها...';
+ root.querySelector('.crm-status').textContent=crmContactsLoadMessage;
+ try{
+  const [contacts,links]=await Promise.all([crmFetchAll('crm_contacts'),crmFetchAll('crm_links')]);
+  if(!authorized)return;
+  crmContacts=contacts.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  crmLinks=links;
+  crmContactsComplete=true;
+  crmContactsLoadMessage='اكتمل تحميل '+crmContacts.length+' جهة اتصال والتحقق من العدد الإجمالي.';
+ }catch(error){
+  console.error('CRM complete loading:',error);
+  crmContactsLoadMessage='تعذر التأكد من اكتمال تحميل جهات الاتصال: '+error.message+' — النتائج الحالية غير معتمدة.';
+ }
+ root.querySelector('.crm-status').textContent=crmContactsLoadMessage;
+ renderCrm();renderStage27Duplicates();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
 }
+
 function ensureCrmSection(){
  let root=$('crmContactsSection');if(root)return root;
  root=el('section','form-card crm-section');root.id='crmContactsSection';
@@ -546,7 +581,7 @@ function renderStage27Duplicates(){
  }
  const groups=stage27Groups(),phoneGroups=groups.filter(g=>g.type==='phone'),nameGroups=groups.filter(g=>g.type==='name');
  const info=el('p','',`السجلات المحمّلة: ${crmContacts.length} | مجموعات أرقام متكررة: ${phoneGroups.length} | مجموعات أسماء متطابقة بعد توحيد الكتابة: ${nameGroups.length}`);root.append(info);
- if(crmContacts.length>=1000)root.append(el('p','','تنبيه: قد تكون النتائج غير شاملة إذا تجاوزت قاعدة البيانات حد جلب Supabase الافتراضي (1000 سجل). لا تعتمد على هذا الفحص لإثبات خلو القاعدة من التكرار.'));
+ root.append(el('p','',crmContactsComplete?'✓ تم التحقق من اكتمال تحميل جهات الاتصال ومطابقة العدد الإجمالي في قاعدة البيانات.':'⚠ '+crmContactsLoadMessage+' لا تعتمد على نتائج الفحص حتى يكتمل التحميل.'));
  const controls=el('div','stage27-controls'),filter=el('select'),search=el('input');search.type='search';search.placeholder='ابحث بالاسم أو الجوال';
  for(const [v,t] of [['all','جميع أنواع التكرار'],['phone','الأرقام المتكررة'],['name','الأسماء المتطابقة']])filter.append(crmOption(v,t));
  filter.value=stage27Filter;search.value=stage27Search;
