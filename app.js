@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const marketing=$('manahelMarketingSection');if(marketing)marketing.replaceChildren();const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();renderStage26UnifiedSearch();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();await stage29LoadHistory();renderStage26UnifiedSearch();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -551,13 +551,80 @@ function renderCrm(){
  for(const x of found){const card=el('article','crm-card');card.append(el('strong','',x.full_name+' — '+x.role),el('small','',x.phone+' · '+[x.city,x.district].filter(Boolean).join(' / ')));if(x.notes)card.append(el('p','',x.notes));
  const actions=el('div','crm-actions'),edit=el('button','ghost','تعديل');edit.type='button';edit.onclick=()=>{const form=$('crmContactForm');for(const k of ['id','full_name','phone','role','city','district','notes'])form.elements[k].value=x[k]||'';form.querySelector('[type=submit]').textContent='تحديث العميل';form.scrollIntoView({behavior:'smooth',block:'start'})};actions.append(edit);
  const number=crmPhone(x.phone);if(number.length>=9&&number.length<=15){const wa=el('a','crm-whatsapp','واتساب');wa.href='https://wa.me/'+number;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
- const del=el('button','ghost','حذف');del.type='button';del.onclick=async()=>{if(!confirm('هل تريد حذف سجل العميل وروابطه بالعقارات والطلبات؟'))return;const {error}=await db.from('crm_contacts').delete().eq('id',x.id);if(error)alert('تعذر الحذف: '+error.message);else await loadCrmContacts()};actions.append(del);card.append(actions);
+ actions.append(stage29OpenButton(x));const del=el('button','ghost','حذف');del.type='button';del.onclick=async()=>{if(!confirm('هل تريد حذف سجل العميل وروابطه بالعقارات والطلبات؟'))return;const {error}=await db.from('crm_contacts').delete().eq('id',x.id);if(error)alert('تعذر الحذف: '+error.message);else await loadCrmContacts()};actions.append(del);card.append(actions);
  const links=el('div','crm-links'),heading=el('strong','','الربط بالعقارات والطلبات');links.append(heading);
  const existing=crmLinks.filter(z=>z.contact_id===x.id);for(const z of existing){const record=z.property_id?listings.find(p=>p.id===z.property_id):requests.find(r=>r.id===z.request_id);const line=el('div','crm-linked-row');line.append(el('span','',(z.property_id?'عقار: ':'طلب: ')+(record?.title||record?.full_name||'سجل مرتبط')));const remove=el('button','ghost','فك الربط');remove.type='button';remove.onclick=async()=>{const {error}=await db.from('crm_links').delete().eq('id',z.id);if(error)alert(error.message);else await loadCrmContacts()};line.append(remove);links.append(line)}
- const linkRow=el('div','crm-link-add'),kind=el('select');kind.append(crmOption('property','ربط بعقار'),crmOption('request','ربط بطلب'));const target=el('select');const fill=()=>{target.replaceChildren();const rows=kind.value==='property'?listings:requests;target.append(crmOption('','اختر السجل'));for(const r of rows)target.append(crmOption(r.id,r.title||r.full_name||r.id))};kind.onchange=fill;fill();const add=el('button','ghost','ربط');add.type='button';add.onclick=async()=>{if(!target.value)return;const payload={contact_id:x.id,property_id:kind.value==='property'?target.value:null,request_id:kind.value==='request'?target.value:null};const {error}=await db.from('crm_links').insert(payload);if(error)alert('تعذر الربط: '+error.message);else await loadCrmContacts()};linkRow.append(kind,target,add);links.append(linkRow);card.append(links);list.append(card)}
+ const linkRow=el('div','crm-link-add'),kind=el('select');kind.append(crmOption('property','ربط بعقار'),crmOption('request','ربط بطلب'));const target=el('select');const fill=()=>{target.replaceChildren();const rows=kind.value==='property'?listings:requests;target.append(crmOption('','اختر السجل'));for(const r of rows)target.append(crmOption(r.id,r.title||r.full_name||r.id))};kind.onchange=fill;fill();const add=el('button','ghost','ربط');add.type='button';add.onclick=async()=>{if(!target.value)return;const payload={contact_id:x.id,property_id:kind.value==='property'?target.value:null,request_id:kind.value==='request'?target.value:null};const {error}=await db.from('crm_links').insert(payload);if(error)alert('تعذر الربط: '+error.message);else await loadCrmContacts()};linkRow.append(kind,target,add);links.append(linkRow);card.append(links);card.append(stage29HistoryPreview(x));list.append(card)}
  if(!found.length)list.append(el('p','','لا توجد سجلات مطابقة.'));
 }
 
+
+
+// Stage 29: admin-only append-only CRM contact history.
+let stage29History=[],stage29HistoryLoaded=false,stage29HistoryError='';
+async function stage29LoadHistory(){
+ if(!authorized||!db)return;
+ stage29HistoryLoaded=false;stage29HistoryError='';
+ try{stage29History=await crmFetchAll('crm_contact_history');stage29HistoryLoaded=true;}
+ catch(e){stage29History=[];stage29HistoryError=e.message;console.error('Stage 29 history:',e)}
+ if($('crmList'))renderCrm();
+}
+function stage29HistoryPreview(contact){
+ const box=el('details','crm-links stage29-history');
+ const rows=stage29History.filter(x=>x.contact_id===contact.id).sort((a,b)=>String(b.contacted_at).localeCompare(String(a.contacted_at)));
+ box.append(el('summary','',`سجل التواصل (${stage29HistoryLoaded?rows.length:'غير متاح'})`));
+ if(!stage29HistoryLoaded){box.append(el('p','',stage29HistoryError?'تعذر تحميل السجل: '+stage29HistoryError:'جارٍ تحميل سجل التواصل...'));return box}
+ if(!rows.length)box.append(el('p','','لم تُسجل اتصالات بعد.'));
+ for(const r of rows.slice(0,30)){
+  const item=el('div','crm-linked-row');const dt=new Date(r.contacted_at);
+  item.append(el('strong','',`${Number.isNaN(dt.getTime())?'':dt.toLocaleString('ar-SA')} · ${r.contact_method} · ${r.contact_result}`),el('small','',`حالة العميل: ${r.client_status}`));
+  if(r.notes)item.append(el('p','',r.notes));box.append(item);
+ }
+ if(rows.length>30)box.append(el('small','',`يعرض أحدث 30 من ${rows.length} سجلًا`));
+ return box;
+}
+function stage29OpenButton(contact){
+ const btn=el('button','ghost','تسجيل تواصل');btn.type='button';btn.disabled=!stage29HistoryLoaded;
+ btn.onclick=()=>stage29OpenDialog(contact);return btn;
+}
+function stage29OpenDialog(contact){
+ if(!authorized||!stage29HistoryLoaded)return;
+ let dialog=$('stage29Dialog');
+ if(!dialog){
+  dialog=el('dialog','stage29-dialog');dialog.id='stage29Dialog';dialog.style.cssText='max-width:min(95vw,620px);width:100%;border:1px solid #ccd5df;border-radius:14px;padding:20px;max-height:90vh;overflow:auto;';
+  const form=el('form','crm-form');form.id='stage29Form';
+  form.append(el('h3','','تسجيل تواصل مع العميل'));
+  const heading=el('strong','');heading.id='stage29ContactName';form.append(heading);
+  const field=(label,tag,name)=>{const wrap=el('label','',label),node=el(tag);node.name=name;wrap.append(node);form.append(wrap);return node};
+  const at=field('تاريخ ووقت التواصل','input','contacted_at');at.type='datetime-local';at.required=true;
+  const method=field('طريقة التواصل','select','contact_method');['اتصال','واتساب','زيارة','أخرى'].forEach(v=>method.append(crmOption(v,v)));
+  const result=field('نتيجة التواصل','select','contact_result');['تم الرد','لم يرد','مهتم','يحتاج متابعة','غير مهتم'].forEach(v=>result.append(crmOption(v,v)));
+  const status=field('حالة العميل','select','client_status');['جديد','تم التواصل','مهتم','يحتاج متابعة','غير مهتم'].forEach(v=>status.append(crmOption(v,v)));
+  const notes=field('ملاحظات التواصل','textarea','notes');notes.rows=3;notes.maxLength=4000;
+  const follow=field('موعد متابعة جديد (اختياري)','input','next_due');follow.type='datetime-local';
+  const msg=el('p','');msg.id='stage29Message';msg.setAttribute('role','status');form.append(msg);
+  const actions=el('div','crm-actions');const save=el('button','btn navy','حفظ سجل التواصل');save.type='submit';
+  const close=el('button','ghost','إلغاء');close.type='button';close.onclick=()=>dialog.close();actions.append(save,close);form.append(actions);dialog.append(form);document.body.append(dialog);
+  form.onsubmit=async e=>{
+   e.preventDefault();if(!authorized||!stage29HistoryLoaded)return;
+   const id=form.dataset.contactId;const date=new Date(at.value);if(Number.isNaN(date.getTime())){msg.textContent='تاريخ التواصل غير صحيح';return}
+   const due=follow.value?new Date(follow.value):null;if(due&&Number.isNaN(due.getTime())){msg.textContent='موعد المتابعة غير صحيح';return}
+   const payload={contact_id:id,contacted_at:date.toISOString(),contact_method:method.value,contact_result:result.value,client_status:status.value,notes:notes.value.trim()||null};
+   save.disabled=true;msg.textContent='جارٍ الحفظ...';
+   const {error}=await db.from('crm_contact_history').insert(payload);
+   if(error){msg.textContent='تعذر حفظ التواصل: '+error.message;save.disabled=false;return}
+   if(due){
+    const person=crmContacts.find(c=>c.id===id);
+    const task={title:'متابعة العميل: '+(person?.full_name||'عميل'),contact_id:id,due_at:due.toISOString(),priority:'متوسطة',status:'جديدة',channel:method.value,notes:notes.value.trim()||null};
+    const {error:taskError}=await db.from('crm_followups').insert(task);
+    if(taskError){msg.textContent='تم حفظ التواصل، لكن تعذر إنشاء مهمة المتابعة: '+taskError.message;await stage29LoadHistory();await loadFollowups();save.disabled=false;return}
+   }
+   dialog.close();save.disabled=false;await stage29LoadHistory();if(due)await loadFollowups();
+  };
+ }
+ const form=$('stage29Form');form.reset();form.dataset.contactId=contact.id;$('stage29ContactName').textContent=contact.full_name+' — '+contact.phone;$('stage29Message').textContent='';
+ form.elements.contacted_at.value=followupLocal(new Date().toISOString());dialog.showModal();
+}
 
 // Stage 28: read-only CRM filtering and CSV export; no database mutations.
 function stage28Normalize(v){return String(v??'').normalize('NFKC').trim().toLocaleLowerCase('ar').replace(/\s+/g,' ')}
