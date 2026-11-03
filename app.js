@@ -763,7 +763,15 @@ function renderStage24AlertsCenter(){
  const end=new Date(start);end.setDate(end.getDate()+1);
  const alerts=[];
  const active=followupRows.filter(t=>!['مكتملة','ملغاة'].includes(t.status));
- const validDate=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d:null};
+ const validDate=value=>{
+  // Missing dates must not become Unix epoch (1970-01-01).
+  if(value===null||value===undefined)return null;
+  if(typeof value!=='string'&&!(value instanceof Date))return null;
+  if(typeof value==='string'&&!value.trim())return null;
+  const d=new Date(value);
+  if(!Number.isFinite(d.getTime())||d.getFullYear()<2000)return null;
+  return d;
+ };
  const category=d=>d<start?'overdue':d<end?'today':'upcoming';
  for(const t of active){
   const due=validDate(t.due_at);if(!due)continue;
