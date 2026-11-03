@@ -101,6 +101,45 @@ function setupAdminNavigation(){
 // Read-only dashboard: uses the same authorized data already loaded for the admin panel.
 // Stage 11: administrative overview. All figures are derived from already authorized records.
 let dashboardPeriod='all';
+function renderStage25DashboardSummary(dash){
+ if(!authorized)return;
+ const alerts=stage25CollectAlerts();
+ const count=type=>alerts.filter(a=>a.type===type).length;
+ const section=el('section','stage25-dashboard-summary');
+ section.setAttribute('aria-label','ملخص التنبيهات العقارية');
+ section.append(el('h4','','ملخص التنبيهات والمتابعات'),el('p','','مؤشرات مباشرة من السجلات المحمّلة، مستقلة عن فلتر فترة الإحصائيات. لا تُرسل رسائل تلقائيًا.'));
+ const stylesId='stage25DashboardStyle';
+ if(!$(stylesId)){
+  const style=el('style');style.id=stylesId;style.textContent=`
+  .stage25-dashboard-summary{border:1px solid #dce3ed;border-radius:14px;padding:16px;margin:16px 0;min-width:0}
+  .stage25-dashboard-summary h4{margin:0 0 8px}
+  .stage25-dashboard-summary>p{margin:0 0 14px}
+  .stage25-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .stage25-metric{border:1px solid #dce3ed;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+  .stage25-metric strong{font-size:1.5rem}
+  .stage25-next{margin:14px 0;overflow-wrap:anywhere}
+  .stage25-dashboard-summary button{min-height:42px;max-width:100%}
+  `;document.head.append(style);
+ }
+ const grid=el('div','stage25-grid');
+ for(const [type,label] of [['overdue','متأخرة'],['today','مستحقة اليوم'],['upcoming','قادمة'],['confirmation','تأكيد المالك']]){
+  const card=el('div','stage25-metric');
+  card.append(el('span','',label),el('strong','',String(count(type))));
+  grid.append(card);
+ }
+ section.append(grid);
+ const next=alerts.filter(a=>a.due&&a.type==='upcoming').sort((a,b)=>a.due-b.due)[0];
+ const nextBox=el('div','stage25-next');
+ nextBox.append(el('strong','','أقرب متابعة قادمة: '));
+ nextBox.append(el('span','',next?next.title+' — '+stage22Date(next.due):'لا توجد متابعة قادمة مسجلة'));
+ section.append(nextBox);
+ const button=el('button','ghost','فتح مركز التنبيهات العقارية');
+ button.type='button';
+ button.onclick=()=>{const target=$('stage24AlertsCenter');if(target)target.scrollIntoView({behavior:'smooth',block:'start'});else alert('لم يكتمل تحميل مركز التنبيهات بعد، حاول تحديث البيانات.')};
+ section.append(button);
+ dash.append(section);
+}
+
 function renderDashboard(){
  const panel=$('adminPanel');if(!panel||!authorized)return;
  let dash=$('manahelDashboard');
@@ -130,7 +169,8 @@ function renderDashboard(){
   ['طلبات العملاء',r.length,`${newRequests} جديد`],['الصفقات',d.length,`${active} نشطة`],
   ['الصفقات المكتملة',completed,'حسب مرحلة الصفقة'],['طلبات قيد المتابعة',followups,'تحتاج متابعة']]){
   const card=el('div','dash-stat stage11-stat');card.append(el('span','dash-stat-label',label),el('strong','dash-stat-value',String(value)),el('small','stage11-hint',hint));cards.append(card)}
- dash.append(cards);
+  dash.append(cards);
+  renderStage25DashboardSummary(dash);
  const sections=el('div','dash-sections stage11-sections');
  const makePanel=title=>{const box=el('div','dash-panel');box.append(el('h4','',title));return box};
  const barPanel=(title,rows,total)=>{const box=makePanel(title);if(!rows.length){box.append(el('p','dash-empty','لا توجد بيانات لهذه الفترة.'));return box}
@@ -590,7 +630,7 @@ async function loadOwnerContacts(){
  const {data,error}=await db.from('property_owner_contacts').select('id,property_id,contact_id,contacted_at,contact_method,contact_result,notes,next_followup_at,created_at').order('contacted_at',{ascending:false}).limit(1000);
  if(error){console.warn('Stage 22 history unavailable:',error);ownerContactRows=[];stage22LoadError=error.message}
  else{ownerContactRows=data||[];stage22LoadError=''}
- renderStage22OwnerContacts();renderAdminListings();renderStage23OwnerCenter();renderStage24AlertsCenter();
+ renderStage22OwnerContacts();renderAdminListings();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();
 }
 let stage22LoadError='';
 function stage22LatestContact(x){
@@ -730,6 +770,48 @@ function renderStage23OwnerCenter(){
 }
 
 
+function stage25CollectAlerts(){
+ const start=new Date();start.setHours(0,0,0,0);
+ const end=new Date(start);end.setDate(end.getDate()+1);
+ const alerts=[];
+ const active=followupRows.filter(t=>!['مكتملة','ملغاة'].includes(t.status));
+ const validDate=value=>{if(value===null||value===undefined||String(value).trim()==='')return null;const d=new Date(value);return Number.isFinite(d.getTime())&&d.getFullYear()>=2000?d:null};
+ const category=d=>d<start?'overdue':d<end?'today':'upcoming';
+ for(const t of active){
+  const due=validDate(t.due_at);if(!due)continue;
+  const p=listings.find(x=>x.id===t.property_id),c=crmContacts.find(x=>x.id===t.contact_id);
+  alerts.push({id:'task:'+t.id,type:category(due),title:t.title||'مهمة متابعة',
+   detail:[p?.title,c?.full_name].filter(Boolean).join(' — '),due,source:'مهمة',
+   action:()=>{const section=ensureFollowupsSection();renderFollowups();section.scrollIntoView({behavior:'smooth',block:'start'});
+    const form=$('followupForm');if(form){for(const key of ['id','title','contact_id','property_id','request_id','priority','status','channel','notes','outcome'])form.elements[key].value=t[key]||'';
+     form.elements.due_at.value=followupLocal(t.due_at);form.querySelector('button[type=submit]').textContent='حفظ التعديل';form.scrollIntoView({behavior:'smooth',block:'start'})}}
+  });
+ }
+ for(const p of listings){
+  const age=stage21Age(p);
+  if(age===null||age>30){
+   alerts.push({id:'confirmation:'+p.id,type:'confirmation',title:'تأكيد توفر العقار مطلوب',
+    detail:p.title||'عقار بدون عنوان',source:'العروض',due:null,
+    action:()=>{const section=$('stage21ValiditySection')||$('adminListings');section?.scrollIntoView({behavior:'smooth',block:'start'})}});
+  }
+  // Only the most recent owner-contact reminder is actionable. Suppress duplicates
+  // when an active task for the same property is due on the same local calendar day.
+  const latest=ownerContactRows.filter(r=>r.property_id===p.id).sort((a,b)=>new Date(b.contacted_at||0)-new Date(a.contacted_at||0))[0];
+  const due=validDate(latest?.next_followup_at);
+  if(due){
+   const sameDay=active.some(t=>t.property_id===p.id&&validDate(t.due_at)?.toDateString()===due.toDateString());
+   if(!sameDay){
+    alerts.push({id:'owner:'+p.id,type:category(due),title:'متابعة المالك',
+     detail:p.title||'عقار بدون عنوان',source:'سجل التواصل',due,
+     action:()=>{const section=$('stage22OwnerContactsSection');if(!section)return;
+      const sel=section.querySelector('form select');if(sel){sel.value=p.id;sel.dispatchEvent(new Event('change'))}
+      section.scrollIntoView({behavior:'smooth',block:'start'})}});
+   }
+  }
+ }
+ return alerts;
+}
+
 // Stage 24: admin-only, read-only notification center. No new database table or automatic messaging.
 let stage24Filter='all';
 function renderStage24AlertsCenter(){
@@ -759,52 +841,7 @@ function renderStage24AlertsCenter(){
  root.replaceChildren();
  root.append(el('h3','','مركز التنبيهات العقارية'),el('p','','تنبيهات داخل لوحة الإدارة فقط، مستمدة من المهام وسجل التواصل والعروض. لا تُرسل رسائل تلقائيًا ولا تُعدّل السجلات.'));
  if(stage22LoadError)root.append(el('p','status error','تنبيه: تعذر تحميل سجل التواصل، وقد تكون تنبيهات الملاك غير مكتملة.'));
- const start=new Date();start.setHours(0,0,0,0);
- const end=new Date(start);end.setDate(end.getDate()+1);
- const alerts=[];
- const active=followupRows.filter(t=>!['مكتملة','ملغاة'].includes(t.status));
- const validDate=value=>{
-  // Missing dates must not become Unix epoch (1970-01-01).
-  if(value===null||value===undefined)return null;
-  if(typeof value!=='string'&&!(value instanceof Date))return null;
-  if(typeof value==='string'&&!value.trim())return null;
-  const d=new Date(value);
-  if(!Number.isFinite(d.getTime())||d.getFullYear()<2000)return null;
-  return d;
- };
- const category=d=>d<start?'overdue':d<end?'today':'upcoming';
- for(const t of active){
-  const due=validDate(t.due_at);if(!due)continue;
-  const p=listings.find(x=>x.id===t.property_id),c=crmContacts.find(x=>x.id===t.contact_id);
-  alerts.push({id:'task:'+t.id,type:category(due),title:t.title||'مهمة متابعة',
-   detail:[p?.title,c?.full_name].filter(Boolean).join(' — '),due,source:'مهمة',
-   action:()=>{const section=ensureFollowupsSection();renderFollowups();section.scrollIntoView({behavior:'smooth',block:'start'});
-    const form=$('followupForm');if(form){for(const key of ['id','title','contact_id','property_id','request_id','priority','status','channel','notes','outcome'])form.elements[key].value=t[key]||'';
-     form.elements.due_at.value=followupLocal(t.due_at);form.querySelector('button[type=submit]').textContent='حفظ التعديل';form.scrollIntoView({behavior:'smooth',block:'start'})}}
-  });
- }
- for(const p of listings){
-  const age=stage21Age(p);
-  if(age===null||age>30){
-   alerts.push({id:'confirmation:'+p.id,type:'confirmation',title:'تأكيد توفر العقار مطلوب',
-    detail:p.title||'عقار بدون عنوان',source:'العروض',due:null,
-    action:()=>{const section=$('stage21ValiditySection')||$('adminListings');section?.scrollIntoView({behavior:'smooth',block:'start'})}});
-  }
-  // Only the most recent owner-contact reminder is actionable. Suppress duplicates
-  // when an active task for the same property is due on the same local calendar day.
-  const latest=ownerContactRows.find(r=>r.property_id===p.id);
-  const due=validDate(latest?.next_followup_at);
-  if(due){
-   const sameDay=active.some(t=>t.property_id===p.id&&validDate(t.due_at)?.toDateString()===due.toDateString());
-   if(!sameDay){
-    alerts.push({id:'owner:'+p.id,type:category(due),title:'متابعة المالك',
-     detail:p.title||'عقار بدون عنوان',source:'سجل التواصل',due,
-     action:()=>{const section=$('stage22OwnerContactsSection');if(!section)return;
-      const sel=section.querySelector('form select');if(sel){sel.value=p.id;sel.dispatchEvent(new Event('change'))}
-      section.scrollIntoView({behavior:'smooth',block:'start'})}});
-   }
-  }
- }
+ const alerts=stage25CollectAlerts();
  const stats=el('div','stage24-stats');
  for(const [type,label] of [['overdue','متأخرة'],['today','مستحقة اليوم'],['upcoming','قادمة'],['confirmation','تأكيد المالك']]){
   const item=el('div','stage24-stat');item.append(el('span','',label),el('strong','',String(alerts.filter(a=>a.type===type).length)));stats.append(item);
@@ -1337,7 +1374,7 @@ async function loadFollowups(){
  const root=ensureFollowupsSection();
  const {data,error}=await db.from('crm_followups').select('*').order('due_at',{ascending:true}).limit(1000);
  if(error){root.querySelector('.followup-message').textContent='تعذر تحميل المتابعات. نفّذ ملف stage12_followups.sql في Supabase ثم حدّث الصفحة. التفاصيل: '+error.message;return}
- followupRows=data||[];renderFollowups();renderStage23OwnerCenter();renderStage24AlertsCenter();
+ followupRows=data||[];renderFollowups();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();
 }
 function ensureFollowupsSection(){
  let root=$('manahelFollowupsSection');if(root)return root;
