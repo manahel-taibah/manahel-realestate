@@ -428,9 +428,10 @@ function ensureCrmSection(){
   const order=el('select');order.id='crmSort';order.setAttribute('aria-label','ترتيب جهات الاتصال');
   for(const [value,label] of [['newest','الأحدث إضافة'],['oldest','الأقدم إضافة'],['name_asc','الاسم أ–ي'],['name_desc','الاسم ي–أ'],['city','حسب المدينة']])order.append(crmOption(value,label));
   const exportBtn=el('button','ghost','تصدير النتائج CSV (Excel)');exportBtn.type='button';exportBtn.id='crmExportCsv';exportBtn.onclick=stage28ExportCsv;
+  const xlsxBtn=el('button','ghost','تصدير Excel (.xlsx)');xlsxBtn.type='button';xlsxBtn.id='crmExportXlsx';xlsxBtn.onclick=stage28ExportXlsx;
   const clear=el('button','ghost','مسح الفلاتر');clear.type='button';clear.onclick=()=>{search.value='';filter.value='';city.value='';district.value='';order.value='newest';renderCrm()};
   search.oninput=renderCrm;filter.onchange=renderCrm;city.onchange=()=>{district.value='';renderCrm()};district.onchange=renderCrm;order.onchange=renderCrm;
-  tools.append(search,filter,city,district,order,exportBtn,clear);
+  tools.append(search,filter,city,district,order,xlsxBtn,exportBtn,clear);
  const count=el('small','crm-count');count.id='crmCount';const items=el('div','crm-list');items.id='crmList';const status=el('p','crm-status');root.append(form,tools,count,items,status);
  const panel=$('manahelAdminContent')||$('adminPanel');panel.append(root);
  ensureCrmImporter(root);
@@ -546,6 +547,7 @@ function renderCrm(){
  const found=stage28FilteredContacts();
  $('crmCount').textContent=`النتائج: ${found.length} من ${crmContacts.length}${crmContactsComplete?'':' — التحميل غير مكتمل، النتائج غير معتمدة'}`;
  const exportBtn=$('crmExportCsv');if(exportBtn)exportBtn.disabled=!crmContactsComplete||!found.length;
+ const xlsxBtn=$('crmExportXlsx');if(xlsxBtn)xlsxBtn.disabled=!crmContactsComplete||!found.length;
  for(const x of found){const card=el('article','crm-card');card.append(el('strong','',x.full_name+' — '+x.role),el('small','',x.phone+' · '+[x.city,x.district].filter(Boolean).join(' / ')));if(x.notes)card.append(el('p','',x.notes));
  const actions=el('div','crm-actions'),edit=el('button','ghost','تعديل');edit.type='button';edit.onclick=()=>{const form=$('crmContactForm');for(const k of ['id','full_name','phone','role','city','district','notes'])form.elements[k].value=x[k]||'';form.querySelector('[type=submit]').textContent='تحديث العميل';form.scrollIntoView({behavior:'smooth',block:'start'})};actions.append(edit);
  const number=crmPhone(x.phone);if(number.length>=9&&number.length<=15){const wa=el('a','crm-whatsapp','واتساب');wa.href='https://wa.me/'+number;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}
@@ -582,6 +584,45 @@ function stage28ExportCsv(){
  const csv='\uFEFF'+[columns.map(c=>csvCell(c[0])).join(','),...rows.map(r=>columns.map(([,key])=>csvCell(r[key])).join(','))].join('\r\n');
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
  const a=document.createElement('a');a.href=url;a.download='manahel-contacts-'+new Date().toISOString().slice(0,10)+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+// Stage 28: self-contained Office Open XML exporter; no external script or server access.
+// All worksheet cells are explicit strings, preserving phone numbers and leading zeros.
+function stage28XlsxZip(files){
+ const enc=new TextEncoder(),chunks=[],central=[];let offset=0;
+ const u16=n=>[n&255,(n>>>8)&255],u32=n=>[n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255];
+ const crcTable=stage28XlsxZip.crcTable||(stage28XlsxZip.crcTable=Array.from({length:256},(_,i)=>{let c=i;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;return c>>>0}));
+ const crc32=bytes=>{let c=0xffffffff;for(const b of bytes)c=crcTable[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0};
+ for(const [name,content] of files){
+  const n=enc.encode(name),data=enc.encode(content),crc=crc32(data);
+  const local=new Uint8Array([80,75,3,4,...u16(20),...u16(0x800),...u16(0),...u16(0),...u16(0),...u32(crc),...u32(data.length),...u32(data.length),...u16(n.length),...u16(0),...n]);
+  chunks.push(local,data);
+  central.push(new Uint8Array([80,75,1,2,...u16(20),...u16(20),...u16(0x800),...u16(0),...u16(0),...u16(0),...u32(crc),...u32(data.length),...u32(data.length),...u16(n.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(offset),...n]));
+  offset+=local.length+data.length;
+ }
+ const centralSize=central.reduce((sum,b)=>sum+b.length,0);
+ const end=new Uint8Array([80,75,5,6,...u16(0),...u16(0),...u16(files.length),...u16(files.length),...u32(centralSize),...u32(offset),...u16(0)]);
+ return new Blob([...chunks,...central,end],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function stage28ExportXlsx(){
+ if(!authorized||!crmContactsComplete){alert('يجب اكتمال تحميل جهات الاتصال قبل التصدير.');return}
+ const rows=stage28FilteredContacts();if(!rows.length){alert('لا توجد جهات اتصال مطابقة للتصدير.');return}
+ const columns=[['الاسم','full_name'],['الجوال','phone'],['التصنيف','role'],['المدينة','city'],['الحي','district'],['الملاحظات','notes'],['تاريخ الإضافة','created_at']];
+ const escapeXml=value=>String(value??'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+ const colName=i=>{let s='';for(i++;i;i=Math.floor((i-1)/26))s=String.fromCharCode(65+(i-1)%26)+s;return s};
+ const all=[columns.map(([title])=>title),...rows.map(row=>columns.map(([,key])=>String(row[key]??'')))];
+ const sheetRows=all.map((cells,i)=>`<row r="${i+1}">${cells.map((value,j)=>`<c r="${colName(j)}${i+1}" t="inlineStr"${i===0?' s="1"':''}><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`).join('')}</row>`).join('');
+ const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0" rightToLeft="1"/></sheetViews><cols><col min="1" max="1" width="35" customWidth="1"/><col min="2" max="2" width="21" customWidth="1"/><col min="3" max="5" width="22" customWidth="1"/><col min="6" max="6" width="48" customWidth="1"/><col min="7" max="7" width="27" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:G${all.length}"/></worksheet>`;
+ const files=[
+  ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+  ['_rels/.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+  ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="جهات الاتصال" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+  ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+  ['xl/styles.xml','<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/></font><font><b/><sz val="11"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>'],
+  ['xl/worksheets/sheet1.xml',sheet]
+ ];
+ try{const blob=stage28XlsxZip(files),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='manahel-contacts-'+new Date().toISOString().slice(0,10)+'.xlsx';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
+ catch(error){console.error('Excel export:',error);alert('تعذر إنشاء ملف Excel: '+error.message)}
 }
 
 // Stage 27: read-only CRM duplicate review. No merge, deletion, or database writes.
