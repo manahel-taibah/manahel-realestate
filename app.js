@@ -681,11 +681,18 @@ function renderStage23OwnerCenter(){
   const history=ownerContactRows.filter(r=>r.property_id===x.id);
   // A newer contact may supersede an earlier follow-up, so only the latest recorded contact drives this queue.
   const last=latest.get(x.id)||null;
-  const due=last?.next_followup_at?new Date(last.next_followup_at):null;
-  const dueValid=due&&!Number.isNaN(due.getTime());
-  const state=dueValid?(due<today?'overdue':due<tomorrow?'today':'upcoming'):'none';
+  // Combine the latest contact's reminder with active tasks linked to this property.
+  // A task is a separate record; do not count it twice when its date matches a contact reminder.
+  const reminders=[];
+  if(last?.next_followup_at){const date=new Date(last.next_followup_at);if(Number.isFinite(date.getTime()))reminders.push({date,source:'سجل التواصل'});}
+  for(const task of followupRows.filter(t=>t.property_id===x.id&&!['مكتملة','ملغاة'].includes(t.status))){
+   const date=new Date(task.due_at);if(Number.isFinite(date.getTime()))reminders.push({date,source:'مهمة متابعة',title:task.title});
+  }
+  reminders.sort((a,b)=>a.date-b.date);
+  const next=reminders[0]||null,due=next?.date||null;
+  const state=due?(due<today?'overdue':due<tomorrow?'today':'upcoming'):'none';
   const stale=stage21Age(x);
-  return {x,owner,history,last,due:dueValid?due:null,state,needsConfirmation:stale===null||stale>30};
+  return {x,owner,history,last,due,state,next,reminderCount:reminders.length,needsConfirmation:stale===null||stale>30};
  });
  const stats=el('div','followup-stats');for(const [name,count] of [
   ['متابعة متأخرة',rows.filter(r=>r.state==='overdue').length],
@@ -709,8 +716,8 @@ function renderStage23OwnerCenter(){
    card.append(el('small','',`${r.x.city||''} · ${r.x.district||''} · حالة التوفر: ${r.x.availability_status||'غير محددة'} · ${r.x.is_published?'منشور':'غير منشور'}`));
    card.append(el('p','',r.owner?`المالك/جهة الاتصال: ${r.owner.full_name} — ${r.owner.phone||'بدون رقم'}`:'لا يوجد مالك أو جهة اتصال مرتبطة بالعقار'));
    card.append(el('small','',r.last?`آخر تواصل: ${stage22Date(r.last.contacted_at)} — ${r.last.contact_result}`:'لم يُسجل تواصل مع المالك'));
-   const dueLabel=r.state==='overdue'?'متابعة متأخرة':r.state==='today'?'متابعة اليوم':r.state==='upcoming'?'متابعة قادمة':'لا يوجد موعد متابعة في آخر تواصل';
-   card.append(el('small','',dueLabel+(r.due?' — '+stage22Date(r.due):'')));
+   const dueLabel=r.state==='overdue'?'متابعة متأخرة':r.state==='today'?'متابعة اليوم':r.state==='upcoming'?'متابعة قادمة':'لا يوجد موعد متابعة مسجل';
+   card.append(el('small','',dueLabel+(r.due?' — '+stage22Date(r.due)+' ('+r.next.source+')':'')+(r.reminderCount>1?' · إجمالي المواعيد النشطة: '+r.reminderCount:'')));
    if(r.needsConfirmation)card.append(el('small','','⚠ يلزم تأكيد توفر العقار من المالك (لم يُسجل تأكيد أو تجاوز 30 يومًا)'));
    const actions=el('div','actions');
    if(r.owner){const phone=crmPhone(r.owner.phone);if(phone.length>=9&&phone.length<=15){const wa=el('a','ghost','واتساب المالك');wa.href='https://wa.me/'+phone+'?text='+encodeURIComponent('السلام عليكم، نرغب بالاستفسار عن استمرار توفر العقار: '+r.x.title);wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}}
@@ -1225,7 +1232,7 @@ async function loadFollowups(){
  const root=ensureFollowupsSection();
  const {data,error}=await db.from('crm_followups').select('*').order('due_at',{ascending:true}).limit(1000);
  if(error){root.querySelector('.followup-message').textContent='تعذر تحميل المتابعات. نفّذ ملف stage12_followups.sql في Supabase ثم حدّث الصفحة. التفاصيل: '+error.message;return}
- followupRows=data||[];renderFollowups();
+ followupRows=data||[];renderFollowups();renderStage23OwnerCenter();
 }
 function ensureFollowupsSection(){
  let root=$('manahelFollowupsSection');if(root)return root;
