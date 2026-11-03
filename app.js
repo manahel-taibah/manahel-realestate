@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const marketing=$('manahelMarketingSection');if(marketing)marketing.replaceChildren();const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();renderStage26UnifiedSearch();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -362,7 +362,7 @@ async function loadCrmContacts(){
  const root=ensureCrmSection();
  const [c,l]=await Promise.all([db.from('crm_contacts').select('*').order('created_at',{ascending:false}),db.from('crm_links').select('*')]);
  if(c.error||l.error){root.querySelector('.crm-status').textContent='تعذر تحميل سجل العملاء. نفّذ ملف crm_database.sql في Supabase أولًا وتحقق من الصلاحيات.';return}
- crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
+ crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
 }
 function ensureCrmSection(){
  let root=$('crmContactsSection');if(root)return root;
@@ -552,6 +552,82 @@ function ensureRequestManager(){
  fillRequestContacts();
 }
 function fillRequestContacts(){const select=$('requestContactSelect');if(!select)return;const current=select.value;select.replaceChildren(crmOption('','بدون ربط بعميل'));for(const c of crmContacts)select.append(crmOption(c.id,`${c.full_name} — ${c.phone}`));select.value=current;}
+
+// Stage 26: administrator-only, read-only unified search of records already loaded for this session.
+let stage26Query='',stage26Kind='all';
+function stage26Normalize(value){return String(value??'').toLocaleLowerCase('ar').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ـ/g,'').replace(/\s+/g,' ').trim()}
+function renderStage26UnifiedSearch(){
+ if(!authorized)return;
+ const panel=$('manahelAdminContent')||$('adminPanel');if(!panel)return;
+ let root=$('stage26UnifiedSearch');
+ if(!root){
+  root=el('section','form-card stage26-search');root.id='stage26UnifiedSearch';
+  const heading=el('h3','','البحث العقاري الموحد');
+  const intro=el('p','','ابحث في العروض وطلبات العملاء وجهات الاتصال المسجلة. النتائج للمدير فقط ولا تغيّر السجلات.');
+  const controls=el('div','stage26-controls');
+  const search=el('input');search.type='search';search.id='stage26SearchInput';search.placeholder='اسم العقار أو المدينة أو الحي أو اسم العميل أو الجوال';search.setAttribute('aria-label','عبارة البحث الموحد');
+  const kind=el('select');kind.id='stage26Kind';kind.setAttribute('aria-label','نوع السجلات');
+  for(const [v,label] of [['all','جميع السجلات'],['property','العروض العقارية'],['request','طلبات العملاء'],['contact','جهات الاتصال']])kind.append(crmOption(v,label));
+  search.value=stage26Query;kind.value=stage26Kind;
+  search.oninput=()=>{stage26Query=search.value;renderStage26UnifiedSearch()};
+  kind.onchange=()=>{stage26Kind=kind.value;renderStage26UnifiedSearch()};
+  const clear=el('button','ghost','مسح البحث');clear.type='button';clear.onclick=()=>{stage26Query='';stage26Kind='all';renderStage26UnifiedSearch();$('stage26SearchInput')?.focus()};
+  controls.append(search,kind,clear);
+  const count=el('p','stage26-count');count.id='stage26Count';count.setAttribute('aria-live','polite');
+  const results=el('div','stage26-results');results.id='stage26Results';
+  root.append(heading,intro,controls,count,results);
+  const dashboard=$('manahelDashboard');if(dashboard)dashboard.insertAdjacentElement('afterend',root);else panel.prepend(root);
+  if(!$('stage26Style')){
+   const style=el('style');style.id='stage26Style';style.textContent=`
+    .stage26-search{margin:18px 0;min-width:0;scroll-margin-top:16px}
+    .stage26-controls{display:grid;grid-template-columns:minmax(0,2fr) minmax(160px,1fr) auto;gap:10px;align-items:center}
+    .stage26-controls input,.stage26-controls select{width:100%;min-width:0;min-height:44px}
+    .stage26-results{display:grid;gap:10px}
+    .stage26-result{border:1px solid #dce3ed;border-radius:12px;padding:12px;min-width:0;overflow-wrap:anywhere}
+    .stage26-result small{display:block;margin:6px 0}
+    .stage26-result button{min-height:40px}
+    @media(max-width:700px){.stage26-controls{grid-template-columns:minmax(0,1fr)}.stage26-controls button{width:100%}}
+   `;document.head.append(style);
+  }
+ }
+ // Update results in place so typing doesn't destroy input focus or caret position.
+ const q=stage26Normalize(stage26Query),kind=stage26Kind;
+ const matches=(fields)=>!q||stage26Normalize(fields.filter(v=>v!==null&&v!==undefined).join(' ')).includes(q);
+ const properties=(kind==='all'||kind==='property')?listings.filter(x=>matches([x.title,x.city,x.district,x.property_type,x.description,x.availability_status])):[];
+ const reqs=(kind==='all'||kind==='request')?requests.filter(x=>matches([x.full_name,x.phone,x.property_type,x.city,x.district,x.request_details,x.notes])):[];
+ const contacts=(kind==='all'||kind==='contact')?crmContacts.filter(x=>matches([x.full_name,x.phone,x.role,x.city,x.district])):[];
+ const count=properties.length+reqs.length+contacts.length;
+ $('stage26Count').textContent=`النتائج: ${count} (عروض ${properties.length} · طلبات ${reqs.length} · جهات اتصال ${contacts.length})${count>50?' — يُعرض أول 50 نتيجة فقط، خصّص البحث لرؤية المزيد.':''}`;
+ const output=$('stage26Results');output.replaceChildren();
+ if(!count){output.append(el('p','','لا توجد سجلات مطابقة.'));return}
+ const records=[...properties.map(x=>({type:'property',x})),...reqs.map(x=>({type:'request',x})),...contacts.map(x=>({type:'contact',x}))].slice(0,50);
+ for(const {type,x} of records){
+  const card=el('article','stage26-result');
+  const title=type==='property'?x.title||'عقار بدون عنوان':x.full_name||'اسم غير محدد';
+  const label=type==='property'?'عرض عقاري':type==='request'?'طلب عميل':'جهة اتصال';
+  card.append(el('strong','',label+' — '+title));
+  const detail=type==='property'?[x.property_type,x.city,x.district,x.availability_status,x.is_published?'منشور':'غير منشور',format(x.price)]:type==='request'?[x.phone,x.property_type,x.city,x.district,x.status]:[x.phone,x.role,x.city,x.district];
+  card.append(el('small','',detail.filter(v=>v!==null&&v!==undefined&&v!=='').join(' · ')));
+  const open=el('button','ghost',type==='property'?'فتح العقار':type==='request'?'فتح الطلب':'فتح جهة الاتصال');open.type='button';
+  open.onclick=()=>stage26OpenRecord(type,x);
+  card.append(open);output.append(card);
+ }
+}
+function stage26OpenRecord(type,record){
+ if(!authorized)return;
+ let target=null;
+ if(type==='property'){
+  const tools=$('stage18ListingTools');if(tools){tools.querySelector('.stage18-search').value=record.title||'';tools.querySelector('.stage18-type').value='';tools.querySelector('.stage20-availability').value='';tools.querySelector('.stage18-status').value='';tools.querySelector('.stage18-max').value='';renderAdminListings()}
+  target=$('adminListings');
+ }else if(type==='request'){
+  const targetRoot=$('adminRequests'),tools=targetRoot?.previousElementSibling;
+  if(tools){const search=tools.querySelector('.request-search'),filter=tools.querySelector('.request-filter');if(search)search.value=record.phone||record.full_name||'';if(filter)filter.value='';renderRequestItems()}
+  target=targetRoot;
+ }else if(type==='contact'){
+  const search=$('crmSearch'),role=$('crmRoleFilter');if(search)search.value=record.phone||record.full_name||'';if(role)role.value='';renderCrm();target=$('crmContactsSection');
+ }
+ if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+}
 
 // Stage 18: administrator-only listing search, filters and sorting.
 function ensureAdminListingTools(){
