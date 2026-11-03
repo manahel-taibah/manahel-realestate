@@ -613,13 +613,13 @@ function renderStage22OwnerContacts(){
  let root=$('stage22OwnerContactsSection');
  if(!root){root=el('section','form-card stage22-owner-contacts');root.id='stage22OwnerContactsSection';
   const anchor=$('stage21ValiditySection')||$('adminListings');anchor.after(root)}
- root.replaceChildren();root.append(el('h3','','سجل التواصل مع الملاك — المرحلة 22'),el('p','','سجل نتيجة التواصل الفعلي. لا يتم تغيير حالة العقار أو تاريخ التأكيد إلا باختيار ذلك صراحةً. السجلات السابقة لا يمكن تعديلها أو حذفها.'));
+ root.replaceChildren();root.append(el('h3','','سجل التواصل مع الملاك'),el('p','','سجل نتيجة التواصل الفعلي. لا يتم تغيير حالة العقار أو تاريخ التأكيد إلا باختيار ذلك صراحةً. السجلات السابقة لا يمكن تعديلها أو حذفها.'));
  if(stage22LoadError){root.append(el('p','status error','تعذر قراءة السجل: '+stage22LoadError+' — تحقق من صلاحيات API وRLS.'));return}
  const form=el('form','followup-form');
  const make=(title,tag='input')=>{const label=el('label','',title),input=el(tag);label.append(input);form.append(label);return input};
  const property=make('العقار *','select');property.required=true;property.append(crmOption('','اختر العقار'));for(const x of listings)property.append(crmOption(x.id,x.title||x.id));
  const contact=make('المالك المرتبط','select');contact.append(crmOption('','بدون تحديد مالك'));
- const fillContacts=()=>{contact.replaceChildren(crmOption('','بدون تحديد مالك'));const linked=crmLinks.filter(r=>r.property_id===property.value).map(r=>crmContacts.find(c=>c.id===r.contact_id)).filter(Boolean);for(const c of linked)contact.append(crmOption(c.id,c.full_name+' — '+c.role))};property.onchange=fillContacts;
+ const fillContacts=()=>{contact.replaceChildren(crmOption('','بدون تحديد مالك'));const linked=crmLinks.filter(r=>r.property_id===property.value).map(r=>crmContacts.find(c=>c.id===r.contact_id)).filter(Boolean);for(const c of linked)contact.append(crmOption(c.id,c.full_name+' — '+c.role));const preferred=linked.find(c=>c.role==='مالك عقار')||linked[0];if(preferred)contact.value=preferred.id};property.onchange=fillContacts;
  const method=make('وسيلة التواصل *','select');for(const v of ownerContactMethods)method.append(crmOption(v,v));
  const result=make('نتيجة التواصل *','select');for(const v of ownerContactResults)result.append(crmOption(v,v));
  const notes=make('ملاحظات التواصل','textarea');notes.rows=3;notes.maxLength=4000;
@@ -659,7 +659,19 @@ function renderStage23OwnerCenter(){
  if(!authorized)return;
  let root=$('stage23OwnerCenter');
  if(!root){root=el('section','form-card stage23-owner-center');root.id='stage23OwnerCenter';const anchor=$('stage22OwnerContactsSection')||$('stage21ValiditySection')||$('adminListings');anchor.after(root)}
- root.replaceChildren();root.append(el('h3','','مركز متابعة الملاك والعروض العقارية — المرحلة 23'),el('p','','لوحة متابعة للمدير فقط. تعتمد على السجلات المحفوظة، ولا تُرسل رسائل أو تُغيّر حالات العقارات تلقائيًا.'));
+ if(!$('stage23PolishStyle')){const style=el('style');style.id='stage23PolishStyle';style.textContent=`
+ #stage23OwnerCenter{min-width:0}
+ #stage23OwnerCenter .followup-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
+ #stage23OwnerCenter .followup-stat{min-width:0}
+ #stage23OwnerCenter .request-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+ #stage23OwnerCenter .request-tools input,#stage23OwnerCenter .request-tools select{min-width:0;max-width:100%;flex:1 1 175px}
+ #stage23OwnerCenter .admin-item{min-width:0;overflow-wrap:anywhere;line-height:1.8;padding:16px;margin:12px 0}
+ #stage23OwnerCenter .admin-item>small,#stage23OwnerCenter .admin-item>p{display:block;margin:7px 0}
+ #stage23OwnerCenter .admin-item>.actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+ #stage23OwnerCenter .admin-item>.actions>a,#stage23OwnerCenter .admin-item>.actions>button{flex:1 1 130px;min-height:44px;white-space:normal;text-align:center;line-height:1.5;overflow-wrap:normal}
+ @media(max-width:560px){#stage23OwnerCenter .followup-stats{grid-template-columns:repeat(2,minmax(0,1fr))}#stage23OwnerCenter .admin-item{padding:12px}}
+ `;document.head.append(style)}
+ root.replaceChildren();root.append(el('h3','','مركز متابعة الملاك والعروض العقارية'),el('p','','لوحة متابعة للمدير فقط. تعتمد على السجلات المحفوظة، ولا تُرسل رسائل أو تُغيّر حالات العقارات تلقائيًا.'));
  if(stage22LoadError){root.append(el('p','status error','تعذر تحميل سجل التواصل؛ لا يمكن حساب المتابعات بدقة: '+stage22LoadError));return}
  const latest=new Map();for(const r of ownerContactRows){if(!latest.has(r.property_id))latest.set(r.property_id,r)}
  const today=new Date();today.setHours(0,0,0,0);const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1);
@@ -702,7 +714,7 @@ function renderStage23OwnerCenter(){
    if(r.needsConfirmation)card.append(el('small','','⚠ يلزم تأكيد توفر العقار من المالك (لم يُسجل تأكيد أو تجاوز 30 يومًا)'));
    const actions=el('div','actions');
    if(r.owner){const phone=crmPhone(r.owner.phone);if(phone.length>=9&&phone.length<=15){const wa=el('a','ghost','واتساب المالك');wa.href='https://wa.me/'+phone+'?text='+encodeURIComponent('السلام عليكم، نرغب بالاستفسار عن استمرار توفر العقار: '+r.x.title);wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}}
-   const historyButton=el('button','ghost','فتح سجل التواصل');historyButton.type='button';historyButton.onclick=()=>{const section=$('stage22OwnerContactsSection');if(section){section.scrollIntoView({behavior:'smooth',block:'start'});const propertySelect=section.querySelector('form select');if(propertySelect){propertySelect.value=r.x.id;propertySelect.dispatchEvent(new Event('change'))}}};actions.append(historyButton);
+   const historyButton=el('button','ghost','فتح سجل التواصل');historyButton.type='button';historyButton.onclick=()=>{const section=$('stage22OwnerContactsSection');if(section){const propertySelect=section.querySelector('form select');if(propertySelect){propertySelect.value=r.x.id;propertySelect.dispatchEvent(new Event('change'))}section.scrollIntoView({behavior:'smooth',block:'start'})}};actions.append(historyButton);
    const task=el('button','ghost','إنشاء مهمة متابعة');task.type='button';task.onclick=()=>stage21PrepareFollowup(r.x);actions.append(task);
    card.append(actions);card.append(stage22PropertyPanel(r.x));output.append(card)
   }
