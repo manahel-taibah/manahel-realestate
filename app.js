@@ -67,7 +67,7 @@ $('adminToggle').onclick=()=>showAdmin(true);$('backPublic').onclick=()=>showAdm
 async function checkAuth(){if(!db){$('loginPanel').hidden=false;$('adminPanel').hidden=true;setStatus('loginStatus','لتفعيل لوحة التحكم، أضف إعدادات Supabase في config.js.',true);return}const {data}=await db.auth.getSession();session=data.session;authorized=false;if(session){const {data:admin}=await db.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();authorized=!!admin} $('loginPanel').hidden=authorized;$('adminPanel').hidden=!authorized;if(authorized)await loadAdmin();else if(session)setStatus('loginStatus','هذا الحساب غير مخوّل بإدارة الموقع.',true)}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return;const data=Object.fromEntries(new FormData(e.currentTarget));setStatus('loginStatus','جارٍ التحقق...');const {error}=await db.auth.signInWithPassword({email:data.email,password:data.password});if(error){setStatus('loginStatus','بيانات الدخول غير صحيحة أو تعذر تسجيل الدخول.',true);return}await checkAuth()});
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();session=null;authorized=false;$('adminPanel').hidden=true;$('loginPanel').hidden=false;followupRows=[];const marketing=$('manahelMarketingSection');if(marketing)marketing.replaceChildren();const f=$('manahelFollowupsSection');if(f)f.replaceChildren();};
-async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();await stage29LoadHistory();renderStage26UnifiedSearch();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
+async function loadAdmin(){if(!authorized)return;const [p,r]=await Promise.all([db.from('properties').select('*').order('created_at',{ascending:false}),db.from('property_requests').select('*').order('created_at',{ascending:false})]);if(p.error||r.error){setStatus('editorStatus','تعذر تحميل البيانات. تحقق من صلاحيات قاعدة البيانات.',true);return}listings=p.data||[];requests=r.data||[];await loadImages();$('statListings').textContent=listings.length;$('statRequests').textContent=requests.length;renderDashboard();renderAdmin();setupAdminNavigation();await loadCrmContacts();await stage29LoadHistory();renderStage26UnifiedSearch();ensureRequestManager();await loadRequestMatches();await loadDeals();renderStage9Reports();renderStage10Backup();await loadFollowups();renderStage30Board();await loadOwnerContacts();renderStage21Validity();renderStage23OwnerCenter();renderStage24AlertsCenter();renderMarketing();try{await loadDocuments()}catch(e){console.error('Documents UI:',e)}}
 
 // Admin navigation is created only after authorization; existing forms remain untouched.
 function setupAdminNavigation(){
@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['مراجعة جهات الاتصال المكررة','stage27DuplicatesSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['مراجعة جهات الاتصال المكررة','stage27DuplicatesSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['لوحة متابعة العملاء','stage30CustomerBoard'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -170,7 +170,7 @@ function renderDashboard(){
   ['الصفقات المكتملة',completed,'حسب مرحلة الصفقة'],['طلبات قيد المتابعة',followups,'تحتاج متابعة']]){
   const card=el('div','dash-stat stage11-stat');card.append(el('span','dash-stat-label',label),el('strong','dash-stat-value',String(value)),el('small','stage11-hint',hint));cards.append(card)}
   dash.append(cards);
-  renderStage25DashboardSummary(dash);
+  renderStage25DashboardSummary(dash);renderStage30DashboardSummary(dash);
  const sections=el('div','dash-sections stage11-sections');
  const makePanel=title=>{const box=el('div','dash-panel');box.append(el('h4','',title));return box};
  const barPanel=(title,rows,total)=>{const box=makePanel(title);if(!rows.length){box.append(el('p','dash-empty','لا توجد بيانات لهذه الفترة.'));return box}
@@ -396,7 +396,7 @@ async function loadCrmContacts(){
   crmContactsLoadMessage='تعذر التأكد من اكتمال تحميل جهات الاتصال: '+error.message+' — النتائج الحالية غير معتمدة.';
  }
  root.querySelector('.crm-status').textContent=crmContactsLoadMessage;
- renderCrm();renderStage27Duplicates();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
+ renderCrm();renderStage27Duplicates();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();renderStage30Board();if($('manahelMarketingSection'))renderMarketing();
 }
 
 function ensureCrmSection(){
@@ -567,7 +567,7 @@ async function stage29LoadHistory(){
  stage29HistoryLoaded=false;stage29HistoryError='';
  try{stage29History=await crmFetchAll('crm_contact_history');stage29HistoryLoaded=true;}
  catch(e){stage29History=[];stage29HistoryError=e.message;console.error('Stage 29 history:',e)}
- if($('crmList'))renderCrm();
+ if($('crmList'))renderCrm();renderStage30Board();
 }
 function stage29HistoryPreview(contact){
  const box=el('details','crm-links stage29-history');
@@ -1692,7 +1692,7 @@ async function loadFollowups(){
  const root=ensureFollowupsSection();
  const {data,error}=await db.from('crm_followups').select('*').order('due_at',{ascending:true}).limit(1000);
  if(error){root.querySelector('.followup-message').textContent='تعذر تحميل المتابعات. نفّذ ملف stage12_followups.sql في Supabase ثم حدّث الصفحة. التفاصيل: '+error.message;return}
- followupRows=data||[];renderFollowups();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();
+ followupRows=data||[];renderFollowups();renderStage30Board();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();
 }
 function ensureFollowupsSection(){
  let root=$('manahelFollowupsSection');if(root)return root;
@@ -1756,6 +1756,102 @@ function renderFollowups(){
   const del=el('button','ghost','حذف');del.type='button';del.onclick=async()=>{if(!confirm('هل تريد حذف مهمة المتابعة؟'))return;const {error}=await db.from('crm_followups').delete().eq('id',x.id);if(error)root.querySelector('.followup-message').textContent=error.message;else await loadFollowups()};actions.append(del);card.append(actions);list.append(card)}
 }
 
+
+// Stage 30: read-only customer follow-up board. Reuses CRM, history and task tables.
+let stage30Filter='all',stage30Search='';
+function stage30Data(){
+ const day=new Date();day.setHours(0,0,0,0);
+ const today=day.getTime(),tomorrow=new Date(day.getFullYear(),day.getMonth(),day.getDate()+1).getTime();
+ const latest=new Map();
+ for(const h of stage29History){const old=latest.get(h.contact_id);if(!old||String(h.contacted_at)>String(old.contacted_at))latest.set(h.contact_id,h)}
+ const contacts=new Map(crmContacts.map(c=>[c.id,c]));
+ const pending=followupRows.filter(t=>t.status!=='مكتملة'&&t.contact_id&&Number.isFinite(Date.parse(t.due_at)));
+ const groups={overdue:[],today:[],upcoming:[]};
+ for(const task of pending){const when=Date.parse(task.due_at);groups[when<today?'overdue':when<tomorrow?'today':'upcoming'].push(task)}
+ const needs=new Set([...latest.values()].filter(h=>h.client_status==='يحتاج متابعة').map(h=>h.contact_id));
+ const rows=pending.map(task=>({task,contact:contacts.get(task.contact_id),last:latest.get(task.contact_id),due:Date.parse(task.due_at)}));
+ rows.sort((a,b)=>a.due-b.due);
+ return {groups,needs,rows,today,tomorrow,contacts};
+}
+function stage30Navigate(id){
+ const target=$(id);if(!target)return;
+ target.scrollIntoView({behavior:'smooth',block:'start'});
+ const nav=$('manahelAdminNav');if(nav){nav.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.textContent===(id==='stage30CustomerBoard'?'لوحة متابعة العملاء':id==='crmContactsSection'?'سجل العملاء':'المتابعات والمهام')))}
+}
+function stage30OpenContact(contact,record=false){
+ if(!contact){alert('جهة الاتصال غير موجودة في السجل المحمّل.');return}
+ const search=$('crmSearch'),role=$('crmRoleFilter'),city=$('crmCityFilter'),district=$('crmDistrictFilter');
+ if(search)search.value=contact.full_name||contact.phone||'';
+ if(role)role.value='';if(city)city.value='';if(district)district.value='';
+ renderCrm();stage30Navigate('crmContactsSection');
+ const card=[...document.querySelectorAll('#crmList .crm-card')].find(n=>n.querySelector('strong')?.textContent===(contact.full_name+' — '+contact.role));
+ if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
+ if(record)stage29OpenDialog(contact);
+}
+function stage30Styles(){
+ if($('stage30Styles'))return;
+ const style=el('style');style.id='stage30Styles';style.textContent=`
+ #stage30CustomerBoard{margin:18px 0;padding:18px;border:1px solid #dce3ed;border-radius:14px;min-width:0}
+ .stage30-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:12px 0}
+ .stage30-stat{border:1px solid #dce3ed;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+ .stage30-stat strong{font-size:1.5rem}
+ .stage30-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+ .stage30-toolbar input,.stage30-toolbar select{flex:1;min-width:160px;max-width:100%}
+ .stage30-row{border:1px solid #dce3ed;border-radius:12px;padding:12px;margin:10px 0;overflow-wrap:anywhere}
+ .stage30-row>strong{display:block;margin-bottom:5px}
+ .stage30-row small{display:block;margin:5px 0}
+ .stage30-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+ .stage30-actions button,.stage30-actions a{min-height:38px}
+ .stage30-warning{color:#9a3412}
+ `;document.head.append(style);
+}
+function stage30Metric(label,count){const item=el('div','stage30-stat');item.append(el('span','',label),el('strong','',String(count)));return item}
+function renderStage30DashboardSummary(dash){
+ if(!authorized)return;
+ stage30Styles();const data=stage30Data(),wrap=el('section','stage30-summary');
+ wrap.append(el('h4','','متابعة العملاء العقاريين'));
+ const stats=el('div','stage30-stats');
+ for(const [name,n] of [['متأخرة',data.groups.overdue.length],['اليوم',data.groups.today.length],['قادمة',data.groups.upcoming.length],['عملاء يحتاجون متابعة',data.needs.size]])stats.append(stage30Metric(name,n));
+ wrap.append(stats);
+ const note=el('small','','المؤشرات تخص مهام العملاء غير المكتملة. قد تكون للعميل أكثر من مهمة؛ عدد العملاء المحتاجين للمتابعة محسوب من أحدث حالة مسجلة.');wrap.append(note);
+ const button=el('button','ghost','فتح لوحة متابعة العملاء');button.type='button';button.onclick=()=>{renderStage30Board();stage30Navigate('stage30CustomerBoard')};wrap.append(button);dash.append(wrap);
+}
+function renderStage30Board(){
+ if(!authorized)return;
+ stage30Styles();let root=$('stage30CustomerBoard');
+ if(!root){root=el('section','form-card');root.id='stage30CustomerBoard';const panel=$('manahelAdminContent')||$('adminPanel');panel.append(root)}
+ root.replaceChildren();root.append(el('h3','','لوحة متابعة العملاء'),el('p','','مواعيد المتابعة من المهام المسجلة، وآخر تواصل من السجل التاريخي. لا تُرسل رسائل تلقائيًا.'));
+ if(!crmContactsComplete||!stage29HistoryLoaded){root.append(el('p','stage30-warning','بيانات العملاء أو سجل التواصل غير مكتملة؛ المؤشرات الحالية غير معتمدة.'));return}
+ const data=stage30Data(),stats=el('div','stage30-stats');
+ for(const [name,n] of [['متابعات متأخرة',data.groups.overdue.length],['متابعات اليوم',data.groups.today.length],['متابعات قادمة',data.groups.upcoming.length],['عملاء يحتاجون متابعة',data.needs.size]])stats.append(stage30Metric(name,n));root.append(stats);
+ const controls=el('div','stage30-toolbar'),filter=el('select');
+ for(const [v,label] of [['all','جميع المتابعات'],['overdue','المتأخرة'],['today','المستحقة اليوم'],['upcoming','القادمة'],['needs','عملاء يحتاجون متابعة']])filter.append(crmOption(v,label));filter.value=stage30Filter;
+ filter.onchange=()=>{stage30Filter=filter.value;renderStage30Board()};
+ const search=el('input');search.type='search';search.placeholder='بحث باسم العميل أو رقم الجوال أو المهمة';search.value=stage30Search;search.oninput=()=>{stage30Search=search.value;const selectionStart=search.selectionStart;renderStage30Board();const fresh=$('stage30Search');fresh?.focus();if(selectionStart!=null)fresh?.setSelectionRange(selectionStart,selectionStart)};search.id='stage30Search';
+ controls.append(filter,search);root.append(controls);
+ let rows=data.rows.filter(r=>stage30Filter==='all'||(stage30Filter==='needs'?data.needs.has(r.task.contact_id):stage30Filter==='overdue'?r.due<data.today:stage30Filter==='today'?r.due>=data.today&&r.due<data.tomorrow:r.due>=data.tomorrow));
+ if(stage30Filter==='needs'){
+  const present=new Set(rows.map(r=>r.task.contact_id));
+  for(const id of data.needs)if(!present.has(id))rows.push({task:null,contact:data.contacts.get(id),last:stage29History.filter(h=>h.contact_id===id).sort((a,b)=>String(b.contacted_at).localeCompare(String(a.contacted_at)))[0],due:Infinity});
+ }
+ const q=stage30Search.trim().toLocaleLowerCase('ar');if(q)rows=rows.filter(r=>[r.contact?.full_name,r.contact?.phone,r.task?.title,r.task?.notes].join(' ').toLocaleLowerCase('ar').includes(q));
+ root.append(el('p','',`النتائج: ${rows.length} ${stage30Filter==='needs'?'عميل/متابعة':'مهمة متابعة'}`));
+ if(!rows.length){root.append(el('p','','لا توجد نتائج مطابقة.'));return}
+ for(const r of rows){const card=el('article','stage30-row'),contact=r.contact;
+  card.append(el('strong','',contact?.full_name||'عميل غير موجود في السجل المحمّل'));
+  if(contact)card.append(el('small','',`${contact.phone} · ${contact.role||'بدون تصنيف'}`));
+  if(r.task){const type=r.due<data.today?'متأخرة':r.due<data.tomorrow?'اليوم':'قادمة';card.append(el('small',type==='متأخرة'?'stage30-warning':'',`الموعد: ${new Date(r.task.due_at).toLocaleString('ar-SA')} · ${type} · ${r.task.status}`),el('div','',r.task.title));}
+  else card.append(el('small','','لا توجد مهمة متابعة مفتوحة لهذا العميل'));
+  if(r.last)card.append(el('small','',`آخر تواصل: ${new Date(r.last.contacted_at).toLocaleString('ar-SA')} · ${r.last.contact_method} · ${r.last.client_status}`));
+  else card.append(el('small','','لم يُسجل تواصل سابق'));
+  const actions=el('div','stage30-actions');
+  if(contact){const open=el('button','ghost','سجل العميل');open.type='button';open.onclick=()=>stage30OpenContact(contact);actions.append(open);
+   const record=el('button','ghost','تسجيل تواصل');record.type='button';record.onclick=()=>stage30OpenContact(contact,true);actions.append(record);
+   const phone=marketingWebPhone(contact.phone);if(phone){const wa=el('a','crm-whatsapp','واتساب');wa.href='https://wa.me/'+phone;wa.target='_blank';wa.rel='noopener noreferrer';actions.append(wa)}}
+  if(r.task){const taskBtn=el('button','ghost','إدارة المهمة');taskBtn.type='button';taskBtn.onclick=()=>{stage30Navigate('manahelFollowupsSection');const q=$('followupSearch');if(q){q.value=r.task.title;renderFollowups()}};actions.append(taskBtn)}
+  card.append(actions);root.append(card);
+ }
+}
 
 // Stage 13: human-reviewed WhatsApp Web messages, without automated sending.
 const marketingTemplates=[
