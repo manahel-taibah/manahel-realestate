@@ -78,7 +78,7 @@ function setupAdminNavigation(){
   while(panel.firstChild)content.append(panel.firstChild);
   nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
   const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
+  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['مراجعة جهات الاتصال المكررة','stage27DuplicatesSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
   for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
   panel.classList.add('manahel-admin-layout');panel.append(nav,content);
@@ -362,7 +362,7 @@ async function loadCrmContacts(){
  const root=ensureCrmSection();
  const [c,l]=await Promise.all([db.from('crm_contacts').select('*').order('created_at',{ascending:false}),db.from('crm_links').select('*')]);
  if(c.error||l.error){root.querySelector('.crm-status').textContent='تعذر تحميل سجل العملاء. نفّذ ملف crm_database.sql في Supabase أولًا وتحقق من الصلاحيات.';return}
- crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
+ crmContacts=c.data||[];crmLinks=l.data||[];renderCrm();renderStage27Duplicates();renderStage26UnifiedSearch();renderStage21Validity();renderStage22OwnerContacts();renderStage23OwnerCenter();renderStage24AlertsCenter();renderDashboard();if($('manahelMarketingSection'))renderMarketing();
 }
 function ensureCrmSection(){
  let root=$('crmContactsSection');if(root)return root;
@@ -505,6 +505,63 @@ function renderCrm(){
  const existing=crmLinks.filter(z=>z.contact_id===x.id);for(const z of existing){const record=z.property_id?listings.find(p=>p.id===z.property_id):requests.find(r=>r.id===z.request_id);const line=el('div','crm-linked-row');line.append(el('span','',(z.property_id?'عقار: ':'طلب: ')+(record?.title||record?.full_name||'سجل مرتبط')));const remove=el('button','ghost','فك الربط');remove.type='button';remove.onclick=async()=>{const {error}=await db.from('crm_links').delete().eq('id',z.id);if(error)alert(error.message);else await loadCrmContacts()};line.append(remove);links.append(line)}
  const linkRow=el('div','crm-link-add'),kind=el('select');kind.append(crmOption('property','ربط بعقار'),crmOption('request','ربط بطلب'));const target=el('select');const fill=()=>{target.replaceChildren();const rows=kind.value==='property'?listings:requests;target.append(crmOption('','اختر السجل'));for(const r of rows)target.append(crmOption(r.id,r.title||r.full_name||r.id))};kind.onchange=fill;fill();const add=el('button','ghost','ربط');add.type='button';add.onclick=async()=>{if(!target.value)return;const payload={contact_id:x.id,property_id:kind.value==='property'?target.value:null,request_id:kind.value==='request'?target.value:null};const {error}=await db.from('crm_links').insert(payload);if(error)alert('تعذر الربط: '+error.message);else await loadCrmContacts()};linkRow.append(kind,target,add);links.append(linkRow);card.append(links);list.append(card)}
  if(!found.length)list.append(el('p','','لا توجد سجلات مطابقة.'));
+}
+
+// Stage 27: read-only CRM duplicate review. No merge, deletion, or database writes.
+let stage27Filter='all',stage27Search='';
+function stage27Name(v){
+ return String(v||'').normalize('NFKC').toLocaleLowerCase('ar')
+  .replace(/[\u064b-\u065f\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي')
+  .replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+}
+function stage27Phone(v){
+ let n=String(v||'').replace(/[٠-٩]/g,d=>String(d.charCodeAt(0)-0x660))
+  .replace(/[۰-۹]/g,d=>String(d.charCodeAt(0)-0x6f0)).replace(/\D/g,'');
+ if(n.startsWith('00'))n=n.slice(2);
+ if(/^05\d{8}$/.test(n))return '966'+n.slice(1);
+ if(/^5\d{8}$/.test(n))return '966'+n;
+ if(/^9665\d{8}$/.test(n))return n;
+ return n.length>=9&&n.length<=15?n:'';
+}
+function stage27Groups(){
+ const make=(fn,type)=>{
+  const map=new Map();for(const c of crmContacts){const key=fn(c);if(!key)continue;
+   if(!map.has(key))map.set(key,[]);map.get(key).push(c)}
+  return [...map.entries()].filter(([,rows])=>rows.length>1).map(([key,rows])=>({type,key,rows}));
+ };
+ return [...make(c=>stage27Phone(c.phone),'phone'),...make(c=>stage27Name(c.full_name),'name')]
+  .sort((a,b)=>a.type===b.type?b.rows.length-a.rows.length:a.type==='phone'?-1:1);
+}
+function renderStage27Duplicates(){
+ if(!authorized)return;
+ let root=$('stage27DuplicatesSection');if(!root){
+  root=el('section','form-card');root.id='stage27DuplicatesSection';
+  ($('manahelAdminContent')||$('adminPanel')).append(root);
+ }
+ root.replaceChildren();root.append(el('h3','','مراجعة جهات الاتصال المكررة — المرحلة 27'),
+  el('p','','فحص استرشادي للبيانات المحمّلة فقط. لا يتم حذف أو دمج أو تعديل أي جهة اتصال. تطابق الاسم لا يعني بالضرورة أنه الشخص نفسه.'));
+ const styleId='stage27DuplicatesStyle';if(!$(styleId)){
+  const st=el('style');st.id=styleId;st.textContent=`#stage27DuplicatesSection .stage27-controls{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}#stage27DuplicatesSection .stage27-controls>*{flex:1 1 190px;min-width:0}#stage27DuplicatesSection .stage27-group{border:1px solid #dce3ed;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}#stage27DuplicatesSection .stage27-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #edf0f5;padding:10px 0}#stage27DuplicatesSection .stage27-row span{flex:1 1 230px}#stage27DuplicatesSection button{min-height:40px}`;
+  document.head.append(st);
+ }
+ const groups=stage27Groups(),phoneGroups=groups.filter(g=>g.type==='phone'),nameGroups=groups.filter(g=>g.type==='name');
+ const info=el('p','',`السجلات المحمّلة: ${crmContacts.length} | مجموعات أرقام متكررة: ${phoneGroups.length} | مجموعات أسماء متطابقة بعد توحيد الكتابة: ${nameGroups.length}`);root.append(info);
+ if(crmContacts.length>=1000)root.append(el('p','','تنبيه: قد تكون النتائج غير شاملة إذا تجاوزت قاعدة البيانات حد جلب Supabase الافتراضي (1000 سجل). لا تعتمد على هذا الفحص لإثبات خلو القاعدة من التكرار.'));
+ const controls=el('div','stage27-controls'),filter=el('select'),search=el('input');search.type='search';search.placeholder='ابحث بالاسم أو الجوال';
+ for(const [v,t] of [['all','جميع أنواع التكرار'],['phone','الأرقام المتكررة'],['name','الأسماء المتطابقة']])filter.append(crmOption(v,t));
+ filter.value=stage27Filter;search.value=stage27Search;
+ filter.onchange=()=>{stage27Filter=filter.value;renderStage27Duplicates()};
+ search.oninput=()=>{stage27Search=search.value;draw()};controls.append(filter,search);root.append(controls);
+ const count=el('p'),results=el('div');root.append(count,results);
+ function draw(){results.replaceChildren();const q=stage27Name(stage27Search),digits=stage27Phone(stage27Search)||String(stage27Search).replace(/\D/g,'');
+  const shown=groups.filter(g=>(stage27Filter==='all'||g.type===stage27Filter)&&(!stage27Search.trim()||g.rows.some(c=>stage27Name(c.full_name).includes(q)||(digits&&stage27Phone(c.phone).includes(digits)))));
+  count.textContent=`النتائج: ${shown.length} مجموعة (قد يظهر السجل في أكثر من مجموعة)`;
+  if(!shown.length){results.append(el('p','','لا توجد مجموعات مطابقة للفلاتر الحالية.'));return}
+  for(const g of shown){const box=el('div','stage27-group');box.append(el('strong','',`${g.type==='phone'?'رقم متكرر':'اسم متطابق'} — ${g.rows.length} سجلات`));
+   for(const c of g.rows){const row=el('div','stage27-row');row.append(el('span','',`${c.full_name||'بدون اسم'} — ${c.phone||'بدون رقم'} — ${c.role||'غير مصنف'}`));
+    const btn=el('button','ghost','فتح جهة الاتصال');btn.type='button';btn.onclick=()=>{const field=$('crmSearch');if(field){field.value=String(c.phone||c.full_name||'');renderCrm();$('crmContactsSection')?.scrollIntoView({behavior:'smooth',block:'start'})}};row.append(btn);box.append(row)}results.append(box)}
+ }
+ draw();
 }
 
 // Stage 6: administrator-only request editor, using the existing requests table.
