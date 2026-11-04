@@ -430,3 +430,24 @@ body:has(#adminView:not([hidden])) > .whatsapp { display: none !important; }
 .docs-list{display:grid;gap:12px;margin-top:12px}.docs-item{border:1px solid #dbe4ee;border-radius:10px;padding:14px;display:grid;gap:8px}
 .docs-item small{color:#52627a}.docs-actions{display:flex;gap:8px;flex-wrap:wrap}
 .docs-error{color:#b91c1c}@media(max-width:700px){.docs-form{grid-template-columns:1fr}}
+
+
+/* Stage 33: grouped admin home navigation; presentation only. */
+#adminPanel.manahel-admin-home-layout{display:flex!important;flex-direction:column!important;gap:18px!important;align-items:stretch!important}
+#adminPanel.manahel-admin-home-layout>.manahel-admin-nav{position:static!important;top:auto!important;max-height:none!important;overflow:visible!important;display:block!important;width:100%!important;max-width:none!important;box-sizing:border-box;padding:20px!important;box-shadow:0 4px 22px #0a23440a}
+#adminPanel.manahel-admin-home-layout>.manahel-admin-content{width:100%;min-width:0}
+#adminPanel .manahel-navigation-heading h3{margin:0;color:#092346;font-size:1.35rem}
+#adminPanel .manahel-navigation-heading p{margin:5px 0 18px;color:#64748b;font-size:.94rem}
+#adminPanel .manahel-navigation-group{margin:0 0 22px}
+#adminPanel .manahel-navigation-group-title{font-size:1.05rem;color:#092346;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid #e8edf3}
+#adminPanel .manahel-navigation-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+#adminPanel .manahel-navigation-tile{display:flex!important;flex-direction:column;align-items:center;justify-content:center;text-align:center!important;gap:9px;min-height:112px;padding:14px 10px!important;border:1px solid #dce5ef!important;border-radius:14px!important;background:#f8fafc!important;color:#092346!important;white-space:normal;line-height:1.5;transition:background .15s,border-color .15s,transform .15s}
+#adminPanel .manahel-navigation-tile:hover,#adminPanel .manahel-navigation-tile:focus-visible{background:#edf4fb!important;border-color:#b4c9e2!important;transform:translateY(-2px)}
+#adminPanel .manahel-navigation-tile.active{background:#eaf1fa!important;border-color:#a8bfd9!important}
+#adminPanel .manahel-navigation-icon{font-size:1.8rem;line-height:1.2}
+#adminPanel .manahel-navigation-label{font-size:.92rem;font-weight:650}
+#adminPanel .manahel-navigation-home .manahel-new-requests{margin-top:4px}
+#adminPanel .manahel-admin-content > *{scroll-margin-top:95px}
+@media(max-width:900px){#adminPanel .manahel-navigation-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){#adminPanel.manahel-admin-home-layout>.manahel-admin-nav{padding:13px!important}#adminPanel .manahel-navigation-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#adminPanel .manahel-navigation-tile{min-height:100px;padding:10px 7px!important}#adminPanel .manahel-navigation-label{font-size:.83rem}}
+@media(prefers-reduced-motion:reduce){#adminPanel .manahel-navigation-tile{transition:none}}
