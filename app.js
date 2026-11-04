@@ -76,23 +76,44 @@ function setupAdminNavigation(){
  if(!nav){
   const content=el('div','manahel-admin-content');content.id='manahelAdminContent';
   while(panel.firstChild)content.append(panel.firstChild);
-  nav=el('nav','manahel-admin-nav');nav.id='manahelAdminNav';nav.setAttribute('aria-label','التنقل في لوحة الإدارة');
-  const heading=el('strong','manahel-admin-nav-title','إدارة مناهل طيبة');nav.append(heading);
-  const items=[['الإحصائيات','manahelDashboard'],['البحث العقاري الموحد','stage26UnifiedSearch'],['إضافة عقار','listingForm'],['إدارة العروض','adminListings'],['متابعة صلاحية العروض','stage21ValiditySection'],['مركز متابعة الملاك','stage23OwnerCenter'],['مركز التنبيهات العقارية','stage24AlertsCenter'],['سجل التواصل مع الملاك','stage22OwnerContactsSection'],['طلبات العملاء','adminRequests'],['سجل العملاء','crmContactsSection'],['مراجعة جهات الاتصال المكررة','stage27DuplicatesSection'],['إدارة الصفقات','manahelDealsSection'],['المتابعات والمهام','manahelFollowupsSection'],['لوحة متابعة العملاء','stage30CustomerBoard'],['تقارير التواصل مع العملاء','stage31ContactReports'],['التسويق عبر واتساب','manahelMarketingSection'],['المستندات والعقود','manahelDocumentsSection'],['التقارير والإحصائيات','manahelReportsSection'],['النسخ الاحتياطي','manahelBackupSection']];
-  for(const [label,id] of items){const button=el('button','manahel-admin-nav-link',label);button.type='button';button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};nav.append(button)}
+  nav=el('nav','manahel-admin-nav manahel-navigation-home');nav.id='manahelAdminNav';
+  nav.setAttribute('aria-label','الأقسام الرئيسية للوحة الإدارة');
+  const title=el('div','manahel-navigation-heading');
+  title.append(el('h3','', 'الأقسام الرئيسية'),el('p','', 'اختر القسم الذي ترغب في العمل عليه'));
+  nav.append(title);
+  const groups=[
+   {title:'العقارات والطلبات',items:[
+    ['🏘️','إدارة العروض','adminListings'],['➕','إضافة عقار','listingForm'],
+    ['🔎','البحث العقاري الموحد','stage26UnifiedSearch'],['📋','طلبات العملاء','adminRequests'],
+    ['🛡️','متابعة صلاحية العروض','stage21ValiditySection'],['🏠','مركز متابعة الملاك','stage23OwnerCenter'],
+    ['📞','سجل التواصل مع الملاك','stage22OwnerContactsSection']]},
+   {title:'العملاء والتسويق',items:[
+    ['👥','سجل العملاء','crmContactsSection'],['🔁','مراجعة جهات الاتصال المكررة','stage27DuplicatesSection'],
+    ['📅','المتابعات والمهام','manahelFollowupsSection'],['🧑‍💼','لوحة متابعة العملاء','stage30CustomerBoard'],
+    ['📊','تقارير التواصل مع العملاء','stage31ContactReports'],['💬','التسويق عبر واتساب','manahelMarketingSection'],
+    ['🔔','مركز التنبيهات العقارية','stage24AlertsCenter']]},
+   {title:'الإدارة والتقارير',items:[
+    ['🤝','إدارة الصفقات','manahelDealsSection'],['📄','المستندات والعقود','manahelDocumentsSection'],
+    ['📈','الإحصائيات','manahelDashboard'],['📑','التقارير والإحصائيات','manahelReportsSection'],
+    ['💾','النسخ الاحتياطي','manahelBackupSection']]}
+  ];
+  for(const group of groups){
+   const section=el('section','manahel-navigation-group');
+   section.append(el('h4','manahel-navigation-group-title',group.title));
+   const grid=el('div','manahel-navigation-grid');
+   for(const [symbol,label,id] of group.items){
+    const button=el('button','manahel-admin-nav-link manahel-navigation-tile');
+    button.type='button';button.setAttribute('aria-label',label);
+    const pict=el('span','manahel-navigation-icon',symbol);pict.setAttribute('aria-hidden','true');
+    button.append(pict,el('span','manahel-navigation-label',label));
+    button.onclick=()=>{const target=$(id);if(target){target.scrollIntoView({behavior:'smooth',block:'start'});nav.querySelectorAll('.manahel-navigation-tile').forEach(b=>b.classList.remove('active'));button.classList.add('active')}};
+    grid.append(button);
+   }
+   section.append(grid);nav.append(section);
+  }
   const newRequests=el('div','manahel-new-requests');newRequests.id='manahelNewRequests';nav.append(newRequests);
-  panel.classList.add('manahel-admin-layout');panel.append(nav,content);
- }
- // Keep the long admin sidebar independently scrollable on desktop.
- if(!document.getElementById('manahelScrollableNavStyle')){
-  const style=document.createElement('style');style.id='manahelScrollableNavStyle';
-  style.textContent=`@media (min-width: 800px) {
-   #manahelAdminNav { position: sticky; top: 12px; align-self: start;
-    max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden;
-    overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
-   #manahelAdminNav .manahel-admin-nav-link { flex-shrink: 0; }
-  }`;
-  document.head.append(style);
+  panel.classList.add('manahel-admin-layout','manahel-admin-home-layout');
+  panel.append(nav,content);
  }
  const count=requests.filter(x=>!x.status||x.status==='جديد').length;
  const indicator=$('manahelNewRequests');if(indicator){indicator.textContent='الطلبات الجديدة: '+count;indicator.classList.toggle('has-new',count>0)}
